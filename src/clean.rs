@@ -1,7 +1,7 @@
+#![allow(clippy::needless_range_loop)]
+
 use itertools::izip;
-use std::collections::{BTreeMap, HashMap, HashSet};
-use std::hash::Hash;
-use std::str::FromStr;
+use std::collections::{BTreeMap, HashMap};
 use std::sync::Arc;
 
 use anyhow::{anyhow, Result};
@@ -25,6 +25,8 @@ use plonky2_evm::prover::prove_with_outputs;
 
 #[derive(Clone, Debug)]
 pub struct MptNode(Vec<u8>);
+
+#[derive(Default)]
 pub struct Mpt {
     pub mpt: HashMap<H256, MptNode>,
     pub root: H256,
@@ -48,7 +50,6 @@ impl Mpt {
         } else {
             return Node::Hash(root).into();
         };
-        // let data = self.mpt.get(&root).unwrap().clone().0;
         let a = rlp::decode_list::<Vec<u8>>(&data);
         match a.len() {
             17 => {
@@ -143,19 +144,14 @@ pub fn apply_diffs(
     } else {
         panic!("wtf?");
     };
-    println!("{:?}", &diff.pre.keys().collect::<Vec<_>>());
-    println!("{:?}", &diff.post.keys().collect::<Vec<_>>());
-    let are = H160::from_str("0x4E453AEC89b5e57B722FF21B06E869B3e2688c70").unwrap();
-    println!("{:?} {:?}", diff.pre.get(&are), diff.post.get(&are));
 
     let empty_node = HashedPartialTrie::from(Node::Empty);
 
-    let tokk = |k: H256| Nibbles::from_bytes_be(&keccak256(&k.0)).unwrap();
+    let tokk = |k: H256| Nibbles::from_bytes_be(&keccak256(k.0)).unwrap();
 
     for (addr, old) in &diff.pre {
-        let key = H256(keccak256(&addr.0));
+        let key = H256(keccak256(addr.0));
         if !diff.post.contains_key(addr) {
-            // println!("Removing");
             storage.remove(&key);
         } else {
             let new = diff.post.get(addr).unwrap();
@@ -164,33 +160,20 @@ pub fn apply_diffs(
             {
                 continue;
             }
-            // println!(
-            //     "LOP {:?} {:?} {:?}",
-            //     addr,
-            //     old.storage.clone(),
-            //     new.storage.clone()
-            // );
             let mut trie = storage.get(&key).unwrap().clone();
             for (&k, &v) in &old.storage.clone().unwrap_or_default() {
                 if !new.storage.clone().unwrap_or_default().contains_key(&k) {
-                    // println!("q2 {:?} {:?} {:?}", addr, k, &trie);
                     trie.delete(tokk(k));
                 } else {
-                    // dbg!("yo");
-                    // dbg!(k, v, &old.storage, &new.storage, &trie.get(tokk(k)));
-                    // trie.delete(tokk(k));
-                    let lol = trie.get(tokk(k)).unwrap();
-                    let lol = rlp::decode::<U256>(lol).unwrap();
-                    assert_eq!(lol, v.into_uint());
+                    let sanity = trie.get(tokk(k)).unwrap();
+                    let sanity = rlp::decode::<U256>(sanity).unwrap();
+                    assert_eq!(sanity, v.into_uint());
                     let w = *new.storage.clone().unwrap_or_default().get(&k).unwrap();
                     trie.insert(tokk(k), rlp::encode(&w.into_uint()).to_vec());
                 }
             }
             for (&k, v) in &new.storage.clone().unwrap_or_default() {
                 if !old.storage.clone().unwrap_or_default().contains_key(&k) {
-                    // dbg!("yu");
-                    // let lol = trie.delete(tokk(k));
-                    // println!("YO {:?} {:?}", k, lol);
                     trie.insert(tokk(k), rlp::encode(&v.into_uint()).to_vec());
                 }
             }
@@ -199,9 +182,8 @@ pub fn apply_diffs(
     }
 
     for (addr, new) in &diff.post {
-        let key = H256(keccak256(&addr.0));
+        let key = H256(keccak256(addr.0));
         if !diff.pre.contains_key(addr) {
-            // println!("wtf {:?} {:?}", addr, new);
             let mut trie = HashedPartialTrie::from(Node::Empty);
             for (&k, v) in &new.storage.clone().unwrap_or_default() {
                 trie.insert(tokk(k), rlp::encode(v).to_vec());
@@ -212,7 +194,7 @@ pub fn apply_diffs(
 
     dbg!("Storage done");
 
-    let tok = |addr: &Address| Nibbles::from_bytes_be(&keccak256(&addr.0)).unwrap();
+    let tok = |addr: &Address| Nibbles::from_bytes_be(&keccak256(addr.0)).unwrap();
 
     // Delete accounts that are not in the post state.
     for addr in diff.pre.keys() {
@@ -244,19 +226,13 @@ pub fn apply_diffs(
                 nonce: acc.nonce.unwrap_or(U256::zero()),
                 balance: acc.balance.unwrap_or(U256::zero()),
                 storage_root: storage
-                    .get(&H256(keccak256(&addr.0)))
+                    .get(&H256(keccak256(addr.0)))
                     .unwrap_or(&empty_node.clone())
                     .hash(),
                 code_hash,
             };
-            // println!("GAR {:?}, {:?}, {:?}", addr, &account, acc);
             mpt.insert(tok(addr), rlp::encode(&account).to_vec());
         } else {
-            // Existing account
-            // if mpt.get(tok(addr)).is_none() {
-            //     dbg!(addr, acc);
-            // }
-            // let old = rlp::decode::<AccountRlp>(mpt.get(tok(addr)).unwrap()).unwrap();
             let old = mpt
                 .get(tok(addr))
                 .map(|d| rlp::decode(d).unwrap())
@@ -281,18 +257,15 @@ pub fn apply_diffs(
                     }
                 })
                 .unwrap_or(old.code_hash);
-            // println!("{:?} {}", addr, code_hash);
             let account = AccountRlp {
                 nonce: acc.nonce.unwrap_or(old.nonce),
                 balance: acc.balance.unwrap_or(old.balance),
                 storage_root: storage
-                    .get(&H256(keccak256(&addr.0)))
+                    .get(&H256(keccak256(addr.0)))
                     .map(|trie| trie.hash())
                     .unwrap_or(old.storage_root),
                 code_hash,
             };
-            // println!("GOR {:?}, {:?}", addr, &account,);
-            // mpt.delete(tok(addr));
             mpt.insert(tok(addr), rlp::encode(&account).to_vec());
         }
     }
@@ -305,16 +278,15 @@ fn trim(
     mut storage_mpts: HashMap<H256, HashedPartialTrie>,
     touched: BTreeMap<Address, AccountState>,
 ) -> (HashedPartialTrie, HashMap<H256, HashedPartialTrie>) {
-    let tok = |addr: &Address| Nibbles::from_bytes_be(&keccak256(&addr.0)).unwrap();
+    let tok = |addr: &Address| Nibbles::from_bytes_be(&keccak256(addr.0)).unwrap();
     let keys = touched.keys().map(tok).collect::<Vec<_>>();
     let new_state_trie = create_trie_subset(&trie, keys).unwrap();
     let keys_to_addrs = touched
         .keys()
-        .map(|addr| (H256(keccak256(&addr.0)), *addr))
+        .map(|addr| (H256(keccak256(addr.0)), *addr))
         .collect::<HashMap<_, _>>();
     for (k, t) in storage_mpts.iter_mut() {
         if !keys_to_addrs.contains_key(k) {
-            // *t = create_trie_subset(t, vec![]).unwrap();
             *t = HashedPartialTrie::from(Node::Hash(t.hash()));
         } else {
             let addr = keys_to_addrs.get(k).unwrap();
@@ -324,31 +296,12 @@ fn trim(
                 .clone()
                 .unwrap_or_default()
                 .keys()
-                .map(|slot| Nibbles::from_bytes_be(&keccak256(&slot.0)).unwrap())
+                .map(|slot| Nibbles::from_bytes_be(&keccak256(slot.0)).unwrap())
                 .collect::<Vec<_>>();
             *t = create_trie_subset(t, keys).unwrap();
         }
     }
     (new_state_trie, storage_mpts)
-    // let mut prefixes = HashSet::new();
-    // for k in keys {
-    //     for n in 0..=64 {
-    //         let x = k.truncate_n_nibbles_back(n);
-    //         prefixes.insert(x);
-    //     }
-    // }
-    // (trim_helper(trie, &prefixes), storage_mpts)
-}
-
-fn trim_helper(trie: HashedPartialTrie, prefixes: &HashSet<Nibbles>) -> HashedPartialTrie {
-    // match trie.node {
-    //     Node::Empty => {}
-    //     Node::Hash(_) => {}
-    //     Node::Branch { .. } => {}
-    //     Node::Extension { .. } => {}
-    //     Node::Leaf { .. } => {}
-    // }
-    todo!()
 }
 
 /// Keccak of empty bytes.
@@ -442,7 +395,9 @@ pub async fn get_block_metadata(
 }
 
 /// Prove an Ethereum block given its block number and some extra storage slots.
-pub async fn prove_block(block_number: u64, provider: &Provider<Http>) -> Result<()> {
+pub async fn gather_witness_and_prove_tx(tx: Transaction, provider: &Provider<Http>) -> Result<()> {
+    let block_number = tx.block_number.unwrap().0[0];
+    let tx_index = tx.transaction_index.unwrap().0[0] as usize;
     let block = provider
         .get_block(block_number)
         .await?
@@ -456,8 +411,7 @@ pub async fn prove_block(block_number: u64, provider: &Provider<Http>) -> Result
     let mut state = BTreeMap::<Address, AccountState>::new();
     let mut traces: Vec<BTreeMap<Address, AccountState>> = vec![];
     let mut txns_info = vec![];
-    for &hash in &block.transactions {
-        // for &hash in block.transactions.iter().take(2) {
+    for &hash in block.transactions.iter().take(tx_index + 1) {
         let txn = provider.get_transaction(hash);
         let txn = txn
             .await?
@@ -466,12 +420,6 @@ pub async fn prove_block(block_number: u64, provider: &Provider<Http>) -> Result
         let trace = provider
             .debug_trace_transaction(hash, tracing_options())
             .await?;
-        // dbg!(&trace);
-        // dbg!(
-        //     provider
-        //         .debug_trace_transaction(hash, tracing_options_diff())
-        //         .await?
-        // );
         let accounts = if let GethTrace::Known(
             GethTraceFrame::PreStateTracer(PreStateFrame::Default(accounts))
         ) = trace
@@ -508,7 +456,6 @@ pub async fn prove_block(block_number: u64, provider: &Provider<Http>) -> Result
     }
 
     for (address, account) in &state {
-        // println!("DUF {:?} {:?}", address, account);
         let AccountState { code, storage, .. } = account;
         let empty_storage = storage.is_none();
         let mut storage_keys = vec![];
@@ -517,9 +464,7 @@ pub async fn prove_block(block_number: u64, provider: &Provider<Http>) -> Result
         }
         let (proof, storage_proof, storage_hash, _account_is_empty) =
             get_proof(*address, storage_keys, (block_number - 1).into(), provider).await?;
-        // dbg!(address, &proof);
         let key = keccak256(address.0);
-        // println!("{:?} {:?}", address, H256(key));
         insert_mpt(&mut state_mpt, proof);
         if !empty_storage {
             let mut storage_mpt = Mpt::new();
@@ -542,23 +487,11 @@ pub async fn prove_block(block_number: u64, provider: &Provider<Http>) -> Result
         .ok_or_else(|| anyhow!("Block not found. Block number: {}", block_number - 1))?;
     state_mpt.root = prev_block.state_root;
 
-    let (block_metadata, final_hash) =
+    let (block_metadata, _final_hash) =
         get_block_metadata(block_number.into(), chain_id, provider).await?;
-    let withdrawals = if let Some(v) = block.withdrawals {
-        v.into_iter()
-            .map(|w| (w.address, w.amount * 1_000_000_000)) // Alchemy returns Gweis for some reason
-            .collect()
-    } else {
-        vec![]
-    };
 
-    for (address, _) in &withdrawals {
-        let (proof, _storage_proof, _storage_hash, _account_is_empty) =
-            get_proof(*address, vec![], (block_number - 1).into(), provider).await?;
-        insert_mpt(&mut state_mpt, proof);
-    }
-
-    prove_block_real_deal(
+    prove_tx(
+        tx_index,
         txn_rlps,
         block_metadata,
         state_mpt,
@@ -567,8 +500,6 @@ pub async fn prove_block(block_number: u64, provider: &Provider<Http>) -> Result
             .iter()
             .map(|(a, m)| (*a, m.to_partial_trie()))
             .collect(),
-        withdrawals,
-        final_hash,
         txns_info,
         traces,
         provider,
@@ -578,15 +509,13 @@ pub async fn prove_block(block_number: u64, provider: &Provider<Http>) -> Result
 
 /// Actually prove the block using Plonky2.
 /// If the block fails because of some unknown storage location, return the storage location.
-/// TODO: For now this only runs witness generation, not the prover.
-async fn prove_block_real_deal(
+async fn prove_tx(
+    tx_index: usize,
     signed_txns: Vec<Vec<u8>>,
     block_metadata: BlockMetadata,
     state_mpt: Mpt,
     mut contract_code: HashMap<H256, Vec<u8>>,
     mut storage_mpts: HashMap<H256, HashedPartialTrie>,
-    withdrawals: Vec<(Address, U256)>,
-    final_hash: H256,
     txns_info: Vec<Transaction>,
     traces: Vec<BTreeMap<Address, AccountState>>,
     provider: &Provider<Http>,
@@ -596,14 +525,12 @@ async fn prove_block_real_deal(
     let mut receipts_mpt = HashedPartialTrie::from(Node::Empty);
     let mut gas_used = U256::zero();
     let mut bloom: Bloom = Bloom::zero();
-    for (i, (tx, touched, signed_txn)) in izip!(txns_info, traces, signed_txns).enumerate() {
-        let a69 =
-            H256::from_str("0x237776be336e28220d76b6dd7f5108dc4ddf954faca64190d889a9f9cc66e446")
-                .unwrap();
-        // println!("LQU {:?}", storage_mpts.get(&a69));
+    for (i, (tx, touched, signed_txn)) in izip!(txns_info, traces, signed_txns)
+        .enumerate()
+        .take(tx_index + 1)
+    {
         log::info!("Proving {}-th transaction: {:?}", i, tx.hash);
         println!("Proving {}-th transaction: {:?}", i, tx.hash);
-        // for ((tx, touched), signed_txn) in txns_info.into_iter().zip(traces).zip(signed_txns) {
         let trace = provider
             .debug_trace_transaction(tx.hash, tracing_options_diff())
             .await?;
@@ -620,7 +547,7 @@ async fn prove_block_real_deal(
         new_bloom.accrue_bloom(&receipt.logs_bloom);
         let mut new_txns_mpt = txns_mpt.clone();
         new_txns_mpt.insert(
-            Nibbles::from_bytes_be(&rlp::encode(&receipt.transaction_index).to_vec()).unwrap(),
+            Nibbles::from_bytes_be(&rlp::encode(&receipt.transaction_index)).unwrap(),
             signed_txn.clone(),
         );
         let mut new_receipts_mpt = receipts_mpt.clone();
@@ -629,32 +556,16 @@ async fn prove_block_real_deal(
             bytes.insert(0, receipt.transaction_type.unwrap().0[0] as u8);
         }
         new_receipts_mpt.insert(
-            Nibbles::from_bytes_be(&rlp::encode(&receipt.transaction_index).to_vec()).unwrap(),
+            Nibbles::from_bytes_be(&rlp::encode(&receipt.transaction_index)).unwrap(),
             bytes,
         );
-        let are =
-            H256::from_str("0x17470ae756f067c9dbf8b78ad86d31a1283256cb0f76ed2fc86e8ba63cfe7c5c")
-                .unwrap()
-                .into_uint();
-        println!("GOP {:?}", next_state_mpt.get(are));
-        // println!(
-        //     "YOP {:?}",
-        //     next_state_mpt
-        //         .items()
-        //         .filter(|x| matches!(x.1, ValOrHash::Val(_)))
-        //         .map(|x| x.1.expect_val())
-        //         .collect::<Vec<_>>()
-        // );
-        // println!("{:?}", &contract_code);
         let inputs = GenerationInputs {
             signed_txn: Some(signed_txn),
             tries: TrieInputs {
                 state_trie: trimmed_state_mpt,
-                // state_trie: state_mpt.clone(),
                 transactions_trie: txns_mpt.clone(),
                 receipts_trie: receipts_mpt.clone(),
                 storage_tries: trimmed_storage_mpts.into_iter().collect(),
-                // storage_tries: storage_mpts.clone().into_iter().collect(),
             },
             withdrawals: vec![],
             contract_code: contract_code.clone(),
@@ -663,7 +574,7 @@ async fn prove_block_real_deal(
             block_bloom_before: convert_bloom(bloom),
             block_bloom_after: convert_bloom(new_bloom),
             block_hashes: BlockHashes {
-                prev_hashes: vec![H256::zero(); 256],
+                prev_hashes: vec![H256::zero(); 256], // TODO!
                 cur_hash: H256::zero(),
             },
             gas_used_before: gas_used,
@@ -676,13 +587,14 @@ async fn prove_block_real_deal(
             },
             txn_number_before: receipt.transaction_index.0[0].into(),
         };
-        // let proof = prove_with_outputs::<GoldilocksField, KeccakGoldilocksConfig, 2>(
-        let proof = prove_with_outputs::<GoldilocksField, KeccakGoldilocksConfig, 2>(
-            &AllStark::default(),
-            &StarkConfig::standard_fast_config(),
-            inputs,
-            &mut TimingTree::default(),
-        )?;
+        if i == tx_index {
+            let _proof = prove_with_outputs::<GoldilocksField, KeccakGoldilocksConfig, 2>(
+                &AllStark::default(),
+                &StarkConfig::standard_fast_config(),
+                inputs,
+                &mut TimingTree::default(),
+            )?;
+        }
         println!("Success");
         state_mpt = next_state_mpt;
         storage_mpts = next_storage_mpts;
