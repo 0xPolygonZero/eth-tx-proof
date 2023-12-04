@@ -1,5 +1,5 @@
 use anyhow::Result;
-use eth_proof::clean::gather_witness_and_prove_tx;
+use eth_proof::gather_witness_and_prove_tx;
 use eth_proof::utils::init_env_logger;
 use ethers::prelude::*;
 use std::convert::TryFrom;
