@@ -1,15 +1,15 @@
 #![allow(clippy::needless_range_loop)]
 
+pub mod mpt;
 pub mod utils;
 
 use itertools::izip;
 use std::collections::{BTreeMap, HashMap};
-use std::sync::Arc;
 
+use crate::mpt::{apply_diffs, insert_mpt, trim, Mpt};
 use anyhow::{anyhow, Result};
 use eth_trie_utils::nibbles::Nibbles;
 use eth_trie_utils::partial_trie::{HashedPartialTrie, Node, PartialTrie};
-use eth_trie_utils::trie_subsets::create_trie_subset;
 use ethers::prelude::*;
 use ethers::types::GethDebugTracerType;
 use ethers::utils::keccak256;
@@ -19,295 +19,13 @@ use plonky2::plonk::config::KeccakGoldilocksConfig;
 use plonky2::util::timing::TimingTree;
 use plonky2_evm::all_stark::AllStark;
 use plonky2_evm::config::StarkConfig;
-use plonky2_evm::generation::mpt::AccountRlp;
 use plonky2_evm::generation::{GenerationInputs, TrieInputs};
 use plonky2_evm::proof::BlockMetadata;
 use plonky2_evm::proof::{BlockHashes, TrieRoots};
 use plonky2_evm::prover::prove_with_outputs;
 
-#[derive(Clone, Debug)]
-pub struct MptNode(Vec<u8>);
-
-#[derive(Default)]
-pub struct Mpt {
-    pub mpt: HashMap<H256, MptNode>,
-    pub root: H256,
-}
-
-impl Mpt {
-    pub fn new() -> Self {
-        Self {
-            mpt: HashMap::new(),
-            root: H256::zero(),
-        }
-    }
-
-    pub fn to_partial_trie(&self) -> HashedPartialTrie {
-        self.to_partial_trie_helper(self.root)
-    }
-    fn to_partial_trie_helper(&self, root: H256) -> HashedPartialTrie {
-        let node = self.mpt.get(&root);
-        let data = if let Some(mpt_node) = node {
-            mpt_node.0.clone()
-        } else {
-            return Node::Hash(root).into();
-        };
-        let a = rlp::decode_list::<Vec<u8>>(&data);
-        match a.len() {
-            17 => {
-                let value = a[16].clone();
-                let mut children = vec![];
-                for i in 0..16 {
-                    if a[i].is_empty() {
-                        children.push(Node::Empty.into());
-                        continue;
-                    }
-                    children.push(
-                        Arc::new(Box::new(self.to_partial_trie_helper(H256::from_slice(&a[i]))))
-                    );
-                }
-                Node::Branch {
-                    value,
-                    children: children.try_into().unwrap(),
-                }
-                .into()
-            }
-            2 => match a[0][0] >> 4 {
-                0 => {
-                    let ext_prefix = Nibbles::from_bytes_be(&a[0][1..]).unwrap();
-                    Node::Extension {
-                        nibbles: ext_prefix,
-                        child: Arc::new(
-                            Box::new(self.to_partial_trie_helper(H256::from_slice(&a[1])))
-                        ),
-                    }
-                    .into()
-                }
-                1 => {
-                    let b = a[0][0] & 0xf;
-                    let mut ext_prefix = if a[0].len() > 1 {
-                        Nibbles::from_bytes_be(&a[0][1..]).unwrap()
-                    } else {
-                        Nibbles {
-                            count: 0,
-                            packed: U512::zero(),
-                        }
-                    };
-                    ext_prefix.push_nibble_front(b);
-                    Node::Extension {
-                        nibbles: ext_prefix,
-                        child: Arc::new(
-                            Box::new(self.to_partial_trie_helper(H256::from_slice(&a[1])))
-                        ),
-                    }
-                    .into()
-                }
-                2 => {
-                    let leaf_prefix = Nibbles::from_bytes_be(&a[0][1..]).unwrap();
-                    Node::Leaf {
-                        nibbles: leaf_prefix,
-                        value: a[1].clone(),
-                    }
-                    .into()
-                }
-                3 => {
-                    let b = a[0][0] & 0xf;
-                    let mut leaf_prefix = Nibbles::from_bytes_be(&a[0][1..]).unwrap();
-                    leaf_prefix.push_nibble_front(b);
-                    Node::Leaf {
-                        nibbles: leaf_prefix,
-                        value: a[1].clone(),
-                    }
-                    .into()
-                }
-                _ => panic!("wtf?"),
-            },
-            _ => panic!("wtf?"),
-        }
-    }
-}
-
-pub fn insert_mpt(mpt: &mut Mpt, proof: Vec<Bytes>) {
-    for p in proof.into_iter() {
-        mpt.mpt.insert(H256(keccak256(&p)), MptNode(p.to_vec()));
-    }
-}
-
-pub fn apply_diffs(
-    mut mpt: HashedPartialTrie,
-    mut storage: HashMap<H256, HashedPartialTrie>,
-    contract_code: &mut HashMap<H256, Vec<u8>>,
-    trace: GethTrace,
-) -> (HashedPartialTrie, HashMap<H256, HashedPartialTrie>) {
-    let diff = if let GethTrace::Known(GethTraceFrame::PreStateTracer(PreStateFrame::Diff(diff))) =
-        trace
-    {
-        diff
-    } else {
-        panic!("wtf?");
-    };
-
-    let empty_node = HashedPartialTrie::from(Node::Empty);
-
-    let tokk = |k: H256| Nibbles::from_bytes_be(&keccak256(k.0)).unwrap();
-
-    for (addr, old) in &diff.pre {
-        let key = H256(keccak256(addr.0));
-        if !diff.post.contains_key(addr) {
-            storage.remove(&key);
-        } else {
-            let new = diff.post.get(addr).unwrap();
-            if old.storage.clone().unwrap_or_default().is_empty()
-                && new.storage.clone().unwrap_or_default().is_empty()
-            {
-                continue;
-            }
-            let mut trie = storage.get(&key).unwrap().clone();
-            for (&k, &v) in &old.storage.clone().unwrap_or_default() {
-                if !new.storage.clone().unwrap_or_default().contains_key(&k) {
-                    trie.delete(tokk(k));
-                } else {
-                    let sanity = trie.get(tokk(k)).unwrap();
-                    let sanity = rlp::decode::<U256>(sanity).unwrap();
-                    assert_eq!(sanity, v.into_uint());
-                    let w = *new.storage.clone().unwrap_or_default().get(&k).unwrap();
-                    trie.insert(tokk(k), rlp::encode(&w.into_uint()).to_vec());
-                }
-            }
-            for (&k, v) in &new.storage.clone().unwrap_or_default() {
-                if !old.storage.clone().unwrap_or_default().contains_key(&k) {
-                    trie.insert(tokk(k), rlp::encode(&v.into_uint()).to_vec());
-                }
-            }
-            storage.insert(key, trie);
-        }
-    }
-
-    for (addr, new) in &diff.post {
-        let key = H256(keccak256(addr.0));
-        if !diff.pre.contains_key(addr) {
-            let mut trie = HashedPartialTrie::from(Node::Empty);
-            for (&k, v) in &new.storage.clone().unwrap_or_default() {
-                trie.insert(tokk(k), rlp::encode(v).to_vec());
-            }
-            storage.insert(key, trie);
-        }
-    }
-
-    dbg!("Storage done");
-
-    let tok = |addr: &Address| Nibbles::from_bytes_be(&keccak256(addr.0)).unwrap();
-
-    // Delete accounts that are not in the post state.
-    for addr in diff.pre.keys() {
-        if !diff.post.contains_key(addr) {
-            dbg!("q1");
-            mpt.delete(tok(addr));
-        }
-    }
-
-    for (addr, acc) in &diff.post {
-        if !diff.pre.contains_key(addr) {
-            // New account
-            let code_hash = acc
-                .code
-                .clone()
-                .map(|s| {
-                    if s.is_empty() {
-                        EMPTY_HASH
-                    } else {
-                        let code = s.split_at(2).1;
-                        let bytes = hex::decode(code).unwrap();
-                        let h = H256(keccak256(&bytes));
-                        contract_code.insert(h, bytes);
-                        h
-                    }
-                })
-                .unwrap_or(EMPTY_HASH);
-            let account = AccountRlp {
-                nonce: acc.nonce.unwrap_or(U256::zero()),
-                balance: acc.balance.unwrap_or(U256::zero()),
-                storage_root: storage
-                    .get(&H256(keccak256(addr.0)))
-                    .unwrap_or(&empty_node.clone())
-                    .hash(),
-                code_hash,
-            };
-            mpt.insert(tok(addr), rlp::encode(&account).to_vec());
-        } else {
-            let old = mpt
-                .get(tok(addr))
-                .map(|d| rlp::decode(d).unwrap())
-                .unwrap_or(AccountRlp {
-                    nonce: U256::zero(),
-                    balance: U256::zero(),
-                    storage_root: empty_node.hash(),
-                    code_hash: EMPTY_HASH,
-                });
-            let code_hash = acc
-                .code
-                .clone()
-                .map(|s| {
-                    if s.is_empty() {
-                        EMPTY_HASH
-                    } else {
-                        let code = s.split_at(2).1;
-                        let bytes = hex::decode(code).unwrap();
-                        let h = H256(keccak256(&bytes));
-                        contract_code.insert(h, bytes);
-                        h
-                    }
-                })
-                .unwrap_or(old.code_hash);
-            let account = AccountRlp {
-                nonce: acc.nonce.unwrap_or(old.nonce),
-                balance: acc.balance.unwrap_or(old.balance),
-                storage_root: storage
-                    .get(&H256(keccak256(addr.0)))
-                    .map(|trie| trie.hash())
-                    .unwrap_or(old.storage_root),
-                code_hash,
-            };
-            mpt.insert(tok(addr), rlp::encode(&account).to_vec());
-        }
-    }
-
-    (mpt, storage)
-}
-
-fn trim(
-    trie: HashedPartialTrie,
-    mut storage_mpts: HashMap<H256, HashedPartialTrie>,
-    touched: BTreeMap<Address, AccountState>,
-) -> (HashedPartialTrie, HashMap<H256, HashedPartialTrie>) {
-    let tok = |addr: &Address| Nibbles::from_bytes_be(&keccak256(addr.0)).unwrap();
-    let keys = touched.keys().map(tok).collect::<Vec<_>>();
-    let new_state_trie = create_trie_subset(&trie, keys).unwrap();
-    let keys_to_addrs = touched
-        .keys()
-        .map(|addr| (H256(keccak256(addr.0)), *addr))
-        .collect::<HashMap<_, _>>();
-    for (k, t) in storage_mpts.iter_mut() {
-        if !keys_to_addrs.contains_key(k) {
-            *t = HashedPartialTrie::from(Node::Hash(t.hash()));
-        } else {
-            let addr = keys_to_addrs.get(k).unwrap();
-            let acc = touched.get(addr).unwrap();
-            let keys = acc
-                .storage
-                .clone()
-                .unwrap_or_default()
-                .keys()
-                .map(|slot| Nibbles::from_bytes_be(&keccak256(slot.0)).unwrap())
-                .collect::<Vec<_>>();
-            *t = create_trie_subset(t, keys).unwrap();
-        }
-    }
-    (new_state_trie, storage_mpts)
-}
-
 /// Keccak of empty bytes.
-const EMPTY_HASH: H256 = H256([
+pub const EMPTY_HASH: H256 = H256([
     197, 210, 70, 1, 134, 247, 35, 60, 146, 126, 125, 178, 220, 199, 3, 192, 229, 0, 182, 83, 202,
     130, 39, 59, 123, 250, 216, 4, 93, 133, 164, 112,
 ]);
@@ -396,7 +114,6 @@ pub async fn get_block_metadata(
     ))
 }
 
-/// Prove an Ethereum block given its block number and some extra storage slots.
 pub async fn gather_witness_and_prove_tx(tx: Transaction, provider: &Provider<Http>) -> Result<()> {
     let block_number = tx.block_number.unwrap().0[0];
     let tx_index = tx.transaction_index.unwrap().0[0] as usize;
@@ -509,8 +226,7 @@ pub async fn gather_witness_and_prove_tx(tx: Transaction, provider: &Provider<Ht
     .await
 }
 
-/// Actually prove the block using Plonky2.
-/// If the block fails because of some unknown storage location, return the storage location.
+#[allow(clippy::too_many_arguments)]
 async fn prove_tx(
     tx_index: usize,
     signed_txns: Vec<Vec<u8>>,
@@ -532,7 +248,6 @@ async fn prove_tx(
         .take(tx_index + 1)
     {
         log::info!("Processing {}-th transaction: {:?}", i, tx.hash);
-        println!("Processing {}-th transaction: {:?}", i, tx.hash);
         let trace = provider
             .debug_trace_transaction(tx.hash, tracing_options_diff())
             .await?;
@@ -591,15 +306,14 @@ async fn prove_tx(
         };
         if i == tx_index {
             log::info!("Proving {}-th transaction: {:?}", i, tx.hash);
-            println!("Proving {}-th transaction: {:?}", i, tx.hash);
             let _proof = prove_with_outputs::<GoldilocksField, KeccakGoldilocksConfig, 2>(
                 &AllStark::default(),
                 &StarkConfig::standard_fast_config(),
                 inputs,
                 &mut TimingTree::default(),
             )?;
+            log::info!("Successfully proved {}-th transaction: {:?}", i, tx.hash);
         }
-        println!("Success");
         state_mpt = next_state_mpt;
         storage_mpts = next_storage_mpts;
         gas_used += receipt.gas_used.unwrap();
