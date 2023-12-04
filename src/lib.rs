@@ -1,7 +1,5 @@
 #![allow(clippy::needless_range_loop)]
 
-pub mod mpt;
-mod partial_tries;
 pub mod utils;
 
 use itertools::izip;
