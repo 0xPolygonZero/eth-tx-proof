@@ -5,6 +5,7 @@ use eth_trie_utils::partial_trie::{HashedPartialTrie, Node};
 use eth_trie_utils::trie_subsets::create_trie_subset;
 use ethers::prelude::*;
 use ethers::utils::{keccak256, rlp};
+use hex::ToHex;
 use plonky2_evm::generation::mpt::AccountRlp;
 use std::collections::{BTreeMap, HashMap};
 use std::sync::Arc;
@@ -113,7 +114,51 @@ impl Mpt {
 
 pub fn insert_mpt(mpt: &mut Mpt, proof: Vec<Bytes>) {
     for p in proof.into_iter() {
-        mpt.mpt.insert(H256(keccak256(&p)), MptNode(p.to_vec()));
+        // mpt.mpt.insert(H256(keccak256(&p)), MptNode(p.to_vec()));
+        insert_mpt_helper(mpt, p);
+    }
+}
+
+fn insert_mpt_helper(mpt: &mut Mpt, rlp_node: Bytes) {
+    let todel = H256(keccak256(&rlp_node));
+    mpt.mpt
+        .insert(H256(keccak256(&rlp_node)), MptNode(rlp_node.to_vec()));
+    let a = rlp::decode_list::<Vec<u8>>(&rlp_node);
+    if a.len() == 2 {
+        let prefix = a[0].clone();
+        let is_leaf = (prefix[0] >> 4 == 2) || (prefix[0] >> 4 == 3);
+        let mut nibbles = nibbles_from_hex_prefix_encoding(&prefix);
+        loop {
+            let node = rlp::encode_list::<Vec<u8>, _>(&[
+                nibbles.to_hex_prefix_encoding(is_leaf).to_vec(),
+                a[1].clone(),
+            ]);
+            mpt.mpt
+                .insert(H256(keccak256(&node)), MptNode(node.to_vec()));
+            if nibbles.is_empty() {
+                break;
+            }
+            nibbles.pop_next_nibble_front();
+        }
+    }
+}
+
+fn nibbles_from_hex_prefix_encoding(b: &[u8]) -> Nibbles {
+    let mut b = b.to_vec();
+    match b[0] >> 4 {
+        0 | 2 => Nibbles::from_bytes_be(&b[1..]).unwrap(),
+        1 | 3 => {
+            b[0] &= 0xf;
+            let mut bs = [0; 64];
+            bs[64 - b.len()..].copy_from_slice(&b);
+            Nibbles {
+                count: 2 * b.len() - 1,
+                // packed: U512::from_bytes_be(&bs).unwrap(),
+                packed: U512::from_big_endian(&b),
+            }
+            // Nibbles::from_bytes_be(&b).unwrap()
+        }
+        _ => panic!("wtf?"),
     }
 }
 
@@ -149,7 +194,9 @@ pub fn apply_diffs(
             let mut trie = storage.get(&key).unwrap().clone();
             for (&k, &v) in &old.storage.clone().unwrap_or_default() {
                 if !new.storage.clone().unwrap_or_default().contains_key(&k) {
+                    // println!("Del {:?} {:?}", addr, k);
                     trie.delete(tokk(k));
+                    // println!("Done Del {:?} {:?}", addr, k);
                 } else {
                     let sanity = trie.get(tokk(k)).unwrap();
                     let sanity = rlp::decode::<U256>(sanity).unwrap();

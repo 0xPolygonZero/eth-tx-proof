@@ -6,7 +6,7 @@ pub mod utils;
 use itertools::izip;
 use std::collections::{BTreeMap, HashMap};
 
-use crate::mpt::{apply_diffs, insert_mpt, trim, Mpt};
+use crate::mpt::{apply_diffs, insert_mpt, trim, Mpt, MptNode};
 use anyhow::{anyhow, Result};
 use eth_trie_utils::nibbles::Nibbles;
 use eth_trie_utils::partial_trie::{HashedPartialTrie, Node, PartialTrie};
@@ -37,6 +37,8 @@ pub async fn get_proof(
     block_number: U64,
     provider: &Provider<Http>,
 ) -> Result<(Vec<Bytes>, Vec<StorageProof>, H256, bool)> {
+    // log::info!("Proof {:?}: {:?} {:?}", block_number, address, locations);
+    // println!("Proof {:?}: {:?} {:?}", block_number, address, locations);
     let proof = provider.get_proof(address, locations, Some(block_number.into()));
     let proof = proof.await?;
     let is_empty =
@@ -97,6 +99,7 @@ pub async fn get_block_metadata(
         .get_block(block_number)
         .await?
         .ok_or_else(|| anyhow!("Block not found. Block number: {}", block_number))?;
+    // dbg!(block.state_root);
     Ok((
         BlockMetadata {
             block_beneficiary: block.author.unwrap(),
@@ -123,7 +126,7 @@ pub async fn gather_witness_and_prove_tx(tx: Transaction, provider: &Provider<Ht
         .ok_or_else(|| anyhow!("Block not found. Block number: {}", block_number))?;
     let mut state_mpt = Mpt::new();
     let mut contract_codes = contract_codes();
-    let mut storage_mpts = vec![];
+    let mut storage_mpts = HashMap::new();
     let mut txn_rlps = vec![];
     let chain_id = U256::one();
     let mut alladdrs = vec![];
@@ -181,22 +184,89 @@ pub async fn gather_witness_and_prove_tx(tx: Transaction, provider: &Provider<Ht
         if let Some(stor) = storage {
             storage_keys.extend(stor.keys().copied());
         }
-        let (proof, storage_proof, storage_hash, _account_is_empty) =
-            get_proof(*address, storage_keys, (block_number - 1).into(), provider).await?;
-        let key = keccak256(address.0);
+        let (proof, storage_proof, storage_hash, _account_is_empty) = get_proof(
+            *address,
+            storage_keys.clone(),
+            (block_number - 1).into(),
+            provider,
+        )
+        .await?;
         insert_mpt(&mut state_mpt, proof);
+
+        let (next_proof, next_storage_proof, _next_storage_hash, _next_account_is_empty) =
+            get_proof(*address, storage_keys, block_number.into(), provider).await?;
+        insert_mpt(&mut state_mpt, next_proof);
+
+        let key = keccak256(address.0);
         if !empty_storage {
             let mut storage_mpt = Mpt::new();
             storage_mpt.root = storage_hash;
             for sp in storage_proof {
                 insert_mpt(&mut storage_mpt, sp.proof);
             }
-            storage_mpts.push((key.into(), storage_mpt));
+            for sp in next_storage_proof {
+                insert_mpt(&mut storage_mpt, sp.proof);
+            }
+            storage_mpts.insert(key.into(), storage_mpt);
         }
         if let Some(code) = code {
             let code = hex::decode(&code[2..])?;
             let codehash = keccak256(&code);
             contract_codes.insert(codehash.into(), code);
+        }
+    }
+
+    for &hash in block.transactions.iter().take(tx_index + 1) {
+        let trace = provider
+            .debug_trace_transaction(hash, tracing_options_diff())
+            .await?;
+        let diff =
+            if let GethTrace::Known(GethTraceFrame::PreStateTracer(PreStateFrame::Diff(diff))) =
+                trace
+            {
+                diff
+            } else {
+                panic!("wtf?");
+            };
+
+        let DiffMode { pre, post } = diff;
+
+        for d in [pre, post] {
+            for (address, account) in d {
+                let AccountState { code, storage, .. } = account;
+                let empty_storage = storage.is_none();
+                let mut storage_keys = vec![];
+                if let Some(stor) = storage {
+                    storage_keys.extend(stor.keys().copied());
+                }
+                let (proof, storage_proof, storage_hash, _account_is_empty) = get_proof(
+                    address,
+                    storage_keys.clone(),
+                    (block_number - 1).into(),
+                    provider,
+                )
+                .await?;
+                insert_mpt(&mut state_mpt, proof);
+
+                let (next_proof, next_storage_proof, _next_storage_hash, _next_account_is_empty) =
+                    get_proof(address, storage_keys, block_number.into(), provider).await?;
+                insert_mpt(&mut state_mpt, next_proof);
+
+                let key = keccak256(address.0);
+                if !empty_storage {
+                    let mut storage_mpt = Mpt::new();
+                    let storage_mpt = storage_mpts
+                        .get_mut(&key.into())
+                        .unwrap_or(&mut storage_mpt);
+                    for sp in storage_proof {
+                        insert_mpt(storage_mpt, sp.proof);
+                    }
+                    for sp in next_storage_proof {
+                        insert_mpt(storage_mpt, sp.proof);
+                    }
+                    // storage_mpts.insert(key.into(), storage_mpt);
+                }
+            }
         }
     }
 
@@ -322,6 +392,8 @@ async fn prove_tx(
         txns_mpt = new_txns_mpt;
         receipts_mpt = new_receipts_mpt;
     }
+
+    // dbg!(state_mpt.hash());
 
     Ok(())
 }
