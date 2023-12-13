@@ -1,11 +1,11 @@
+use crate::utils::keccak;
 use crate::EMPTY_HASH;
 use eth_trie_utils::nibbles::Nibbles;
 use eth_trie_utils::partial_trie::PartialTrie;
 use eth_trie_utils::partial_trie::{HashedPartialTrie, Node};
 use eth_trie_utils::trie_subsets::create_trie_subset;
 use ethers::prelude::*;
-use ethers::utils::{keccak256, rlp};
-use hex::ToHex;
+use ethers::utils::rlp;
 use plonky2_evm::generation::mpt::AccountRlp;
 use std::collections::{BTreeMap, HashMap};
 use std::sync::Arc;
@@ -120,9 +120,8 @@ pub fn insert_mpt(mpt: &mut Mpt, proof: Vec<Bytes>) {
 }
 
 fn insert_mpt_helper(mpt: &mut Mpt, rlp_node: Bytes) {
-    let todel = H256(keccak256(&rlp_node));
     mpt.mpt
-        .insert(H256(keccak256(&rlp_node)), MptNode(rlp_node.to_vec()));
+        .insert(H256(keccak(&rlp_node)), MptNode(rlp_node.to_vec()));
     let a = rlp::decode_list::<Vec<u8>>(&rlp_node);
     if a.len() == 2 {
         let prefix = a[0].clone();
@@ -133,8 +132,7 @@ fn insert_mpt_helper(mpt: &mut Mpt, rlp_node: Bytes) {
                 nibbles.to_hex_prefix_encoding(is_leaf).to_vec(),
                 a[1].clone(),
             ]);
-            mpt.mpt
-                .insert(H256(keccak256(&node)), MptNode(node.to_vec()));
+            mpt.mpt.insert(H256(keccak(&node)), MptNode(node.to_vec()));
             if nibbles.is_empty() {
                 break;
             }
@@ -178,10 +176,10 @@ pub fn apply_diffs(
 
     let empty_node = HashedPartialTrie::from(Node::Empty);
 
-    let tokk = |k: H256| Nibbles::from_bytes_be(&keccak256(k.0)).unwrap();
+    let tokk = |k: H256| Nibbles::from_bytes_be(&keccak(k.0)).unwrap();
 
     for (addr, old) in &diff.pre {
-        let key = H256(keccak256(addr.0));
+        let key = H256(keccak(addr.0));
         if !diff.post.contains_key(addr) {
             storage.remove(&key);
         } else {
@@ -194,7 +192,7 @@ pub fn apply_diffs(
             let mut trie = storage.get(&key).unwrap().clone();
             for (&k, &v) in &old.storage.clone().unwrap_or_default() {
                 if !new.storage.clone().unwrap_or_default().contains_key(&k) {
-                    // println!("Del {:?} {:?}", addr, k);
+                    // dbg!(format!("Del {:?} {:?}", addr, k));
                     trie.delete(tokk(k));
                     // println!("Done Del {:?} {:?}", addr, k);
                 } else {
@@ -215,7 +213,7 @@ pub fn apply_diffs(
     }
 
     for (addr, new) in &diff.post {
-        let key = H256(keccak256(addr.0));
+        let key = H256(keccak(addr.0));
         if !diff.pre.contains_key(addr) {
             let mut trie = HashedPartialTrie::from(Node::Empty);
             for (&k, v) in &new.storage.clone().unwrap_or_default() {
@@ -225,7 +223,7 @@ pub fn apply_diffs(
         }
     }
 
-    let tok = |addr: &Address| Nibbles::from_bytes_be(&keccak256(addr.0)).unwrap();
+    let tok = |addr: &Address| Nibbles::from_bytes_be(&keccak(addr.0)).unwrap();
 
     // Delete accounts that are not in the post state.
     for addr in diff.pre.keys() {
@@ -237,26 +235,26 @@ pub fn apply_diffs(
     for (addr, acc) in &diff.post {
         if !diff.pre.contains_key(addr) {
             // New account
-            let code_hash = acc
-                .code
-                .clone()
-                .map(|s| {
-                    if s.is_empty() {
-                        EMPTY_HASH
-                    } else {
-                        let code = s.split_at(2).1;
-                        let bytes = hex::decode(code).unwrap();
-                        let h = H256(keccak256(&bytes));
-                        contract_code.insert(h, bytes);
-                        h
-                    }
-                })
-                .unwrap_or(EMPTY_HASH);
+            let code_hash =
+                acc.code
+                    .clone()
+                    .map(|s| {
+                        if s.is_empty() {
+                            EMPTY_HASH
+                        } else {
+                            let code = s.split_at(2).1;
+                            let bytes = hex::decode(code).unwrap();
+                            let h = H256(keccak(&bytes));
+                            contract_code.insert(h, bytes);
+                            h
+                        }
+                    })
+                    .unwrap_or(EMPTY_HASH);
             let account = AccountRlp {
                 nonce: acc.nonce.unwrap_or(U256::zero()),
                 balance: acc.balance.unwrap_or(U256::zero()),
                 storage_root: storage
-                    .get(&H256(keccak256(addr.0)))
+                    .get(&H256(keccak(addr.0)))
                     .unwrap_or(&empty_node.clone())
                     .hash(),
                 code_hash,
@@ -281,7 +279,7 @@ pub fn apply_diffs(
                     } else {
                         let code = s.split_at(2).1;
                         let bytes = hex::decode(code).unwrap();
-                        let h = H256(keccak256(&bytes));
+                        let h = H256(keccak(&bytes));
                         contract_code.insert(h, bytes);
                         h
                     }
@@ -291,7 +289,7 @@ pub fn apply_diffs(
                 nonce: acc.nonce.unwrap_or(old.nonce),
                 balance: acc.balance.unwrap_or(old.balance),
                 storage_root: storage
-                    .get(&H256(keccak256(addr.0)))
+                    .get(&H256(keccak(addr.0)))
                     .map(|trie| trie.hash())
                     .unwrap_or(old.storage_root),
                 code_hash,
@@ -307,13 +305,17 @@ pub fn trim(
     trie: HashedPartialTrie,
     mut storage_mpts: HashMap<H256, HashedPartialTrie>,
     touched: BTreeMap<Address, AccountState>,
+    has_storage_deletion: bool,
 ) -> (HashedPartialTrie, HashMap<H256, HashedPartialTrie>) {
-    let tok = |addr: &Address| Nibbles::from_bytes_be(&keccak256(addr.0)).unwrap();
+    let tok = |addr: &Address| Nibbles::from_bytes_be(&keccak(addr.0)).unwrap();
     let keys = touched.keys().map(tok).collect::<Vec<_>>();
     let new_state_trie = create_trie_subset(&trie, keys).unwrap();
+    if has_storage_deletion {
+        return (new_state_trie, storage_mpts);
+    }
     let keys_to_addrs = touched
         .keys()
-        .map(|addr| (H256(keccak256(addr.0)), *addr))
+        .map(|addr| (H256(keccak(addr.0)), *addr))
         .collect::<HashMap<_, _>>();
     for (k, t) in storage_mpts.iter_mut() {
         if !keys_to_addrs.contains_key(k) {
@@ -326,7 +328,7 @@ pub fn trim(
                 .clone()
                 .unwrap_or_default()
                 .keys()
-                .map(|slot| Nibbles::from_bytes_be(&keccak256(slot.0)).unwrap())
+                .map(|slot| Nibbles::from_bytes_be(&keccak(slot.0)).unwrap())
                 .collect::<Vec<_>>();
             *t = create_trie_subset(t, keys).unwrap();
         }

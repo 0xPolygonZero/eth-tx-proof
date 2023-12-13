@@ -6,23 +6,23 @@ pub mod utils;
 use itertools::izip;
 use std::collections::{BTreeMap, HashMap};
 
-use crate::mpt::{apply_diffs, insert_mpt, trim, Mpt, MptNode};
+use crate::mpt::{apply_diffs, insert_mpt, trim, Mpt};
+use crate::utils::{has_storage_deletion, keccak};
 use anyhow::{anyhow, Result};
 use eth_trie_utils::nibbles::Nibbles;
 use eth_trie_utils::partial_trie::{HashedPartialTrie, Node, PartialTrie};
 use ethers::prelude::*;
 use ethers::types::GethDebugTracerType;
-use ethers::utils::keccak256;
 use ethers::utils::rlp;
 use plonky2::field::goldilocks_field::GoldilocksField;
 use plonky2::plonk::config::KeccakGoldilocksConfig;
 use plonky2::util::timing::TimingTree;
 use plonky2_evm::all_stark::AllStark;
 use plonky2_evm::config::StarkConfig;
-use plonky2_evm::generation::{GenerationInputs, TrieInputs};
+use plonky2_evm::generation::{generate_traces, GenerationInputs, TrieInputs};
 use plonky2_evm::proof::BlockMetadata;
 use plonky2_evm::proof::{BlockHashes, TrieRoots};
-use plonky2_evm::prover::prove_with_outputs;
+use plonky2_evm::prover::prove;
 
 /// Keccak of empty bytes.
 pub const EMPTY_HASH: H256 = H256([
@@ -197,7 +197,7 @@ pub async fn gather_witness_and_prove_tx(tx: Transaction, provider: &Provider<Ht
             get_proof(*address, storage_keys, block_number.into(), provider).await?;
         insert_mpt(&mut state_mpt, next_proof);
 
-        let key = keccak256(address.0);
+        let key = keccak(address.0);
         if !empty_storage {
             let mut storage_mpt = Mpt::new();
             storage_mpt.root = storage_hash;
@@ -211,7 +211,7 @@ pub async fn gather_witness_and_prove_tx(tx: Transaction, provider: &Provider<Ht
         }
         if let Some(code) = code {
             let code = hex::decode(&code[2..])?;
-            let codehash = keccak256(&code);
+            let codehash = keccak(&code);
             contract_codes.insert(codehash.into(), code);
         }
     }
@@ -233,13 +233,13 @@ pub async fn gather_witness_and_prove_tx(tx: Transaction, provider: &Provider<Ht
 
         for d in [pre, post] {
             for (address, account) in d {
-                let AccountState { code, storage, .. } = account;
+                let AccountState { storage, .. } = account;
                 let empty_storage = storage.is_none();
                 let mut storage_keys = vec![];
                 if let Some(stor) = storage {
                     storage_keys.extend(stor.keys().copied());
                 }
-                let (proof, storage_proof, storage_hash, _account_is_empty) = get_proof(
+                let (proof, storage_proof, _storage_hash, _account_is_empty) = get_proof(
                     address,
                     storage_keys.clone(),
                     (block_number - 1).into(),
@@ -252,7 +252,7 @@ pub async fn gather_witness_and_prove_tx(tx: Transaction, provider: &Provider<Ht
                     get_proof(address, storage_keys, block_number.into(), provider).await?;
                 insert_mpt(&mut state_mpt, next_proof);
 
-                let key = keccak256(address.0);
+                let key = keccak(address.0);
                 if !empty_storage {
                     let mut storage_mpt = Mpt::new();
                     let storage_mpt = storage_mpts
@@ -321,14 +321,20 @@ async fn prove_tx(
         let trace = provider
             .debug_trace_transaction(tx.hash, tracing_options_diff())
             .await?;
+        let has_storage_deletion = has_storage_deletion(&trace);
         let (next_state_mpt, next_storage_mpts) = apply_diffs(
             state_mpt.clone(),
             storage_mpts.clone(),
             &mut contract_code,
             trace,
         );
-        let (trimmed_state_mpt, trimmed_storage_mpts) =
-            trim(state_mpt.clone(), storage_mpts.clone(), touched);
+        let (trimmed_state_mpt, trimmed_storage_mpts) = trim(
+            state_mpt.clone(),
+            storage_mpts.clone(),
+            touched.clone(),
+            has_storage_deletion,
+        );
+        assert_eq!(trimmed_state_mpt.hash(), state_mpt.hash());
         let receipt = provider.get_transaction_receipt(tx.hash).await?.unwrap();
         let mut new_bloom = bloom;
         new_bloom.accrue_bloom(&receipt.logs_bloom);
@@ -357,16 +363,13 @@ async fn prove_tx(
             withdrawals: vec![],
             contract_code: contract_code.clone(),
             block_metadata: block_metadata.clone(),
-            addresses: vec![],
-            block_bloom_before: convert_bloom(bloom),
-            block_bloom_after: convert_bloom(new_bloom),
             block_hashes: BlockHashes {
                 prev_hashes: vec![H256::zero(); 256], // TODO
                 cur_hash: H256::zero(),               // TODO
             },
             gas_used_before: gas_used,
             gas_used_after: gas_used + receipt.gas_used.unwrap(),
-            genesis_state_trie_root: H256::zero(),
+            checkpoint_state_trie_root: H256::zero(),
             trie_roots_after: TrieRoots {
                 state_root: next_state_mpt.hash(),
                 transactions_root: new_txns_mpt.hash(),
@@ -374,16 +377,22 @@ async fn prove_tx(
             },
             txn_number_before: receipt.transaction_index.0[0].into(),
         };
-        if i == tx_index {
-            log::info!("Proving {}-th transaction: {:?}", i, tx.hash);
-            let _proof = prove_with_outputs::<GoldilocksField, KeccakGoldilocksConfig, 2>(
-                &AllStark::default(),
-                &StarkConfig::standard_fast_config(),
-                inputs,
-                &mut TimingTree::default(),
-            )?;
-            log::info!("Successfully proved {}-th transaction: {:?}", i, tx.hash);
-        }
+        // if i == tx_index {
+        log::info!("Proving {}-th transaction: {:?}", i, tx.hash);
+        // let _proof = prove::<GoldilocksField, KeccakGoldilocksConfig, 2>(
+        //     &AllStark::default(),
+        //     &StarkConfig::standard_fast_config(),
+        //     inputs,
+        //     &mut TimingTree::default(),
+        // )?;
+        let _proof = generate_traces::<GoldilocksField, 2>(
+            &AllStark::default(),
+            inputs,
+            &StarkConfig::standard_fast_config(),
+            &mut TimingTree::default(),
+        )?;
+        log::info!("Successfully proved {}-th transaction: {:?}", i, tx.hash);
+        // }
         state_mpt = next_state_mpt;
         storage_mpts = next_storage_mpts;
         gas_used += receipt.gas_used.unwrap();
