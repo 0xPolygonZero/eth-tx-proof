@@ -311,6 +311,7 @@ pub fn trim(
     let keys = touched.keys().map(tok).collect::<Vec<_>>();
     let new_state_trie = create_trie_subset(&trie, keys).unwrap();
     if has_storage_deletion {
+        // TODO: This is inefficient. Replace with a smarter solution.
         return (new_state_trie, storage_mpts);
     }
     let keys_to_addrs = touched
