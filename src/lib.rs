@@ -270,6 +270,14 @@ pub async fn gather_witness_and_prove_tx(tx: Transaction, provider: &Provider<Ht
         }
     }
 
+    if let Some(v) = &block.withdrawals {
+        for w in v {
+            let (proof, _storage_proof, _storage_hash, _account_is_empty) =
+                get_proof(w.address, vec![], (block_number - 1).into(), provider).await?;
+            insert_mpt(&mut state_mpt, proof);
+        }
+    }
+
     let prev_block = provider
         .get_block(block_number - 1)
         .await?
@@ -291,6 +299,7 @@ pub async fn gather_witness_and_prove_tx(tx: Transaction, provider: &Provider<Ht
             .collect(),
         txns_info,
         traces,
+        block,
         provider,
     )
     .await
@@ -306,6 +315,7 @@ async fn prove_tx(
     mut storage_mpts: HashMap<H256, HashedPartialTrie>,
     txns_info: Vec<Transaction>,
     traces: Vec<BTreeMap<Address, AccountState>>,
+    block: Block<H256>,
     provider: &Provider<Http>,
 ) -> Result<()> {
     let mut state_mpt = state_mpt.to_partial_trie();
@@ -313,11 +323,20 @@ async fn prove_tx(
     let mut receipts_mpt = HashedPartialTrie::from(Node::Empty);
     let mut gas_used = U256::zero();
     let mut bloom: Bloom = Bloom::zero();
-    for (i, (tx, touched, signed_txn)) in izip!(txns_info, traces, signed_txns)
+    // Withdrawals
+    let wds = if let Some(v) = &block.withdrawals {
+        v.into_iter()
+            .map(|w| (w.address, w.amount * 1_000_000_000)) // Alchemy returns Gweis for some reason
+            .collect()
+    } else {
+        vec![]
+    };
+    for (i, (tx, mut touched, signed_txn)) in izip!(txns_info, traces, signed_txns)
         .enumerate()
         .take(tx_index + 1)
     {
         log::info!("Processing {}-th transaction: {:?}", i, tx.hash);
+        let last_tx = tx_index == block.transactions.len() - 1;
         let trace = provider
             .debug_trace_transaction(tx.hash, tracing_options_diff())
             .await?;
@@ -328,6 +347,12 @@ async fn prove_tx(
             &mut contract_code,
             trace,
         );
+        // For the last tx, we want to include the withdrawal addresses in the state trie.
+        if last_tx {
+            for (addr, _) in &wds {
+                touched.insert(*addr, AccountState::default());
+            }
+        }
         let (trimmed_state_mpt, trimmed_storage_mpts) = trim(
             state_mpt.clone(),
             storage_mpts.clone(),
@@ -352,6 +377,23 @@ async fn prove_tx(
             Nibbles::from_bytes_be(&rlp::encode(&receipt.transaction_index)).unwrap(),
             bytes,
         );
+
+        // Use withdrawals for the last tx in the block.
+        let withdrawals = if last_tx { wds.clone() } else { vec![] };
+        // For the last tx, we check that the final trie roots match those in the block header.
+        let trie_roots_after = if last_tx {
+            TrieRoots {
+                state_root: block.state_root,
+                transactions_root: block.transactions_root,
+                receipts_root: block.receipts_root,
+            }
+        } else {
+            TrieRoots {
+                state_root: next_state_mpt.hash(),
+                transactions_root: new_txns_mpt.hash(),
+                receipts_root: new_receipts_mpt.hash(),
+            }
+        };
         let inputs = GenerationInputs {
             signed_txn: Some(signed_txn),
             tries: TrieInputs {
@@ -360,7 +402,7 @@ async fn prove_tx(
                 receipts_trie: receipts_mpt.clone(),
                 storage_tries: trimmed_storage_mpts.into_iter().collect(),
             },
-            withdrawals: vec![],
+            withdrawals,
             contract_code: contract_code.clone(),
             block_metadata: block_metadata.clone(),
             block_hashes: BlockHashes {
@@ -370,11 +412,7 @@ async fn prove_tx(
             gas_used_before: gas_used,
             gas_used_after: gas_used + receipt.gas_used.unwrap(),
             checkpoint_state_trie_root: H256::zero(),
-            trie_roots_after: TrieRoots {
-                state_root: next_state_mpt.hash(),
-                transactions_root: new_txns_mpt.hash(),
-                receipts_root: new_receipts_mpt.hash(),
-            },
+            trie_roots_after,
             txn_number_before: receipt.transaction_index.0[0].into(),
         };
         // if i == tx_index {
