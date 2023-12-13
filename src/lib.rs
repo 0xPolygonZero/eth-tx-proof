@@ -336,7 +336,7 @@ async fn prove_tx(
         .take(tx_index + 1)
     {
         log::info!("Processing {}-th transaction: {:?}", i, tx.hash);
-        let last_tx = tx_index == block.transactions.len() - 1;
+        let last_tx = i == block.transactions.len() - 1;
         let trace = provider
             .debug_trace_transaction(tx.hash, tracing_options_diff())
             .await?;
@@ -350,7 +350,9 @@ async fn prove_tx(
         // For the last tx, we want to include the withdrawal addresses in the state trie.
         if last_tx {
             for (addr, _) in &wds {
-                touched.insert(*addr, AccountState::default());
+                if !touched.contains_key(addr) {
+                    touched.insert(*addr, AccountState::default());
+                }
             }
         }
         let (trimmed_state_mpt, trimmed_storage_mpts) = trim(
@@ -417,18 +419,18 @@ async fn prove_tx(
         };
         // if i == tx_index {
         log::info!("Proving {}-th transaction: {:?}", i, tx.hash);
-        // let _proof = prove::<GoldilocksField, KeccakGoldilocksConfig, 2>(
-        //     &AllStark::default(),
-        //     &StarkConfig::standard_fast_config(),
-        //     inputs,
-        //     &mut TimingTree::default(),
-        // )?;
-        let _proof = generate_traces::<GoldilocksField, 2>(
+        let _proof = prove::<GoldilocksField, KeccakGoldilocksConfig, 2>(
             &AllStark::default(),
-            inputs,
             &StarkConfig::standard_fast_config(),
+            inputs,
             &mut TimingTree::default(),
         )?;
+        // let _proof = generate_traces::<GoldilocksField, 2>(
+        //     &AllStark::default(),
+        //     inputs,
+        //     &StarkConfig::standard_fast_config(),
+        //     &mut TimingTree::default(),
+        // )?;
         log::info!("Successfully proved {}-th transaction: {:?}", i, tx.hash);
         // }
         state_mpt = next_state_mpt;
