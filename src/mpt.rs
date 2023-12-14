@@ -217,7 +217,7 @@ pub fn apply_diffs(
         if !diff.pre.contains_key(addr) {
             let mut trie = HashedPartialTrie::from(Node::Empty);
             for (&k, v) in &new.storage.clone().unwrap_or_default() {
-                trie.insert(tokk(k), rlp::encode(v).to_vec());
+                trie.insert(tokk(k), rlp::encode(&v.into_uint()).to_vec());
             }
             storage.insert(key, trie);
         }
