@@ -99,7 +99,6 @@ pub async fn get_block_metadata(
         .get_block(block_number)
         .await?
         .ok_or_else(|| anyhow!("Block not found. Block number: {}", block_number))?;
-    // dbg!(block.state_root);
     Ok((
         BlockMetadata {
             block_beneficiary: block.author.unwrap(),
@@ -111,7 +110,7 @@ pub async fn get_block_metadata(
             block_base_fee: block.base_fee_per_gas.unwrap(),
             block_bloom: convert_bloom(block.logs_bloom.unwrap()),
             block_gas_used: block.gas_used,
-            block_random: H256::zero(), // TODO
+            block_random: block.mix_hash.unwrap(),
         },
         block.state_root,
     ))
