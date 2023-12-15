@@ -25,7 +25,9 @@ impl Operation for TxProof {
     type Output = AggregatableProof;
 
     fn execute(&self, input: Self::Input) -> Result<Self::Output> {
+        let start = std::time::Instant::now();
         let result = generate_txn_proof(p_state(), input).map_err(FatalError::from)?;
+        log::info!("generate transaction proof took {:?}", start.elapsed());
 
         Ok(result.into())
     }
@@ -38,7 +40,9 @@ impl Monoid for AggProof {
     type Elem = AggregatableProof;
 
     fn combine(&self, a: Self::Elem, b: Self::Elem) -> Result<Self::Elem> {
+        let start = std::time::Instant::now();
         let result = generate_agg_proof(p_state(), &a, &b).map_err(FatalError::from)?;
+        log::info!("generate aggregation proof took {:?}", start.elapsed());
 
         Ok(result.into())
     }
@@ -59,9 +63,11 @@ impl Operation for BlockProof {
     type Output = GeneratedBlockProof;
 
     fn execute(&self, input: Self::Input) -> Result<Self::Output> {
-        Ok(
-            generate_block_proof(p_state(), self.prev.as_ref(), &input)
-                .map_err(FatalError::from)?,
-        )
+        let start = std::time::Instant::now();
+        let proof = generate_block_proof(p_state(), self.prev.as_ref(), &input)
+            .map_err(FatalError::from)?;
+        log::info!("generate block proof took {:?}", start.elapsed());
+
+        Ok(proof)
     }
 }
