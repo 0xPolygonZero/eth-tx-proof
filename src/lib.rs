@@ -5,6 +5,7 @@ pub mod utils;
 
 use itertools::izip;
 use std::collections::{BTreeMap, HashMap};
+use std::time::Duration;
 
 use crate::mpt::{apply_diffs, insert_mpt, trim, Mpt};
 use crate::utils::{has_storage_deletion, keccak};
@@ -418,12 +419,14 @@ async fn prove_tx(
         };
         // if i == tx_index {
         log::info!("Proving {}-th transaction: {:?}", i, tx.hash);
+        let mut timing = TimingTree::new(&format!("Prove txn {:?}", tx.hash), log::Level::Debug);
         let _proof = prove::<GoldilocksField, KeccakGoldilocksConfig, 2>(
             &AllStark::default(),
             &StarkConfig::standard_fast_config(),
             inputs,
-            &mut TimingTree::default(),
+            &mut timing
         )?;
+        timing.filter(Duration::from_millis(100)).print();
         // let _proof = generate_traces::<GoldilocksField, 2>(
         //     &AllStark::default(),
         //     inputs,
