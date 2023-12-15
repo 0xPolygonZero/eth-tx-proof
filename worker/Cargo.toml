@@ -1,0 +1,17 @@
+[package]
+name = "worker"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+paladin-core = { workspace = true }
+anyhow = { workspace = true }
+dotenvy = { workspace = true }
+clap = { workspace = true }
+tokio = { workspace = true }
+tracing = { workspace = true }
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+
+# Local dependencies
+ops = { path = "../ops" }
+common = { path = "../common" }

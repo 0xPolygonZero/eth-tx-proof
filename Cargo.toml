@@ -1,30 +1,23 @@
-[package]
-name = "eth-proof"
-version = "0.1.0"
-edition = "2021"
+[workspace]
+members = ["leader", "worker", "ops", "common"]
+resolver = "2"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
-[dependencies]
+[workspace.dependencies]
 ethers = "2.0.7"
 tokio = { version = "1", features = ["full"] }
 anyhow = "1.0.71"
-# plonky2 = "0.1.3"
-plonky2 = { git = "https://github.com/0xPolygonZero/plonky2", branch = "main" }
-plonky2_evm = { git = "https://github.com/0xPolygonZero/plonky2", branch = "main" }
-#plonky2 = {path="../../Mir/plonky2/plonky2"}
-#plonky2_evm = {path="../../Mir/plonky2/evm"}
-flexi_logger = { version = "0.25.1", features = ["async"] }
-log = "0.4.14"
-itertools = "0.11.0"
-#eth_trie_utils = { git = "https://github.com/mir-protocol/eth_trie_utils", branch = "main" }
-eth_trie_utils = { git = "https://github.com/0xPolygonZero/eth_trie_utils.git", rev = "e9ec4ec2aa2ae976b7c699ef40c1ffc716d87ed5" }
-hex = "0.4.3"
-regex = "1.9"
-rand = "0.8.4"
+plonky2 = { git = "https://github.com/0xPolygonZero/plonky2", rev = "7efd147e0888c5c6754a4d7ee2691a2ff5c82072" }
+plonky2_evm = { git = "https://github.com/0xPolygonZero/plonky2", rev = "7efd147e0888c5c6754a4d7ee2691a2ff5c82072" }
+clap = { version = "4.4.11", features = ["derive", "env"] }
+protocol_decoder = { git = "https://github.com/0xPolygonZero/proof-protocol-decoder.git", rev = "5188c2a183c78ca68b3c270764e5a26d16bb3493" }
+plonky_block_proof_gen = { git = "https://github.com/0xPolygonZero/proof-protocol-decoder.git", rev = "5188c2a183c78ca68b3c270764e5a26d16bb3493" }
+dotenvy = "0.15.7"
+paladin-core = "0.4.1"
+serde = { version = "1.0.193", features = ["derive"] }
+tracing = "0.1"
 
 [patch.crates-io]
-#plonky2 = { git = "https://github.com/mir-protocol/plonky2.git", rev = "6fa59d204fbdf780c02bce41edc1144f436e49e1" }
-#plonky2 = { git = "https://github.com/mir-protocol/plonky2.git", rev = "202985b24f79b354cfdfa2e5c5288e5fbc3f1a41" }
-plonky2 = { git = "https://github.com/0xPolygonZero/plonky2", branch = "main" }
-#plonky2 = {path="../../Mir/plonky2/plonky2"}
+plonky2 = { git = "https://github.com/0xPolygonZero/plonky2", rev = "7efd147e0888c5c6754a4d7ee2691a2ff5c82072" }
+plonky2_evm = { git = "https://github.com/0xPolygonZero/plonky2", rev = "7efd147e0888c5c6754a4d7ee2691a2ff5c82072" }
