@@ -57,7 +57,7 @@ pub fn to_disk(circuits: &AllRecursiveCircuits, circuit_config: &CircuitConfig) 
     unsafe {
         let bytes = slice::from_raw_parts(
             circuits as *const _ as *const u8,
-            mem::size_of_val(circuit_config),
+            mem::size_of_val(circuits),
         );
 
         if let Err(e) = file.write_all(bytes) {
