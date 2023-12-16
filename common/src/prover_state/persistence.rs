@@ -1,29 +1,16 @@
 use std::{
-    fs::{self, OpenOptions},
+    fs::{File, OpenOptions},
     io::Write,
+    mem, slice,
 };
 
-use plonky2::{
-    plonk::config::PoseidonGoldilocksConfig,
-    util::serialization::{DefaultGateSerializer, DefaultGeneratorSerializer},
-};
+use memmap::MmapOptions;
 use plonky_block_proof_gen::types::AllRecursiveCircuits;
 use tracing::{info, warn};
 
 use super::circuit::CircuitConfig;
 
-type Config = PoseidonGoldilocksConfig;
-const SIZE: usize = 2;
 const PROVER_STATE_FILE_PREFIX: &str = "./prover_state";
-
-fn get_serializers() -> (DefaultGateSerializer, DefaultGeneratorSerializer<Config, 2>) {
-    let gate_serializer = DefaultGateSerializer;
-    let witness_serializer: DefaultGeneratorSerializer<Config, SIZE> = DefaultGeneratorSerializer {
-        _phantom: Default::default(),
-    };
-
-    (gate_serializer, witness_serializer)
-}
 
 #[inline]
 fn disk_path(circuit_config: &CircuitConfig) -> String {
@@ -34,20 +21,22 @@ fn disk_path(circuit_config: &CircuitConfig) -> String {
     )
 }
 
-pub fn from_disk(circuit_config: &CircuitConfig) -> Option<AllRecursiveCircuits> {
+pub fn from_disk(circuit_config: &CircuitConfig) -> Option<&'static AllRecursiveCircuits> {
     let path = disk_path(circuit_config);
-    let bytes = fs::read(&path).ok()?;
+    let file = File::open(&path).ok()?;
     info!("found prover state at {path}");
-    let (gate_serializer, witness_serializer) = get_serializers();
-    info!("deserializing prover state...");
-    let state = AllRecursiveCircuits::from_bytes(&bytes, &gate_serializer, &witness_serializer);
+    info!("memory mapping state...");
+    let mmap = unsafe { MmapOptions::new().map(&file) };
+    if let Err(e) = mmap {
+        warn!("failed to memory map prover state, {e:?}");
+        return None;
+    }
+    let mmap = mmap.unwrap();
 
-    match state {
-        Ok(state) => Some(state),
-        Err(e) => {
-            warn!("failed to deserialize prover state, {e:?}");
-            None
-        }
+    unsafe {
+        assert!(mmap.len() == mem::size_of::<AllRecursiveCircuits>());
+        let state = &*(mmap.as_ptr() as *const AllRecursiveCircuits);
+        Some(state)
     }
 }
 
@@ -65,19 +54,14 @@ pub fn to_disk(circuits: &AllRecursiveCircuits, circuit_config: &CircuitConfig) 
         }
     };
 
-    let (gate_serializer, witness_serializer) = get_serializers();
+    unsafe {
+        let bytes = slice::from_raw_parts(
+            circuits as *const _ as *const u8,
+            mem::size_of_val(circuit_config),
+        );
 
-    let bytes = circuits.to_bytes(&gate_serializer, &witness_serializer);
-
-    let bytes = match bytes {
-        Ok(bytes) => bytes,
-        Err(e) => {
-            warn!("failed to create prover state file, {e:?}");
-            return;
+        if let Err(e) = file.write_all(bytes) {
+            warn!("failed to write prover state file, {e:?}");
         }
-    };
-
-    if let Err(e) = file.write_all(&bytes) {
-        warn!("failed to write prover state file, {e:?}");
     }
 }

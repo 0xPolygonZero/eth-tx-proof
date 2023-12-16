@@ -5,7 +5,6 @@ pub mod mpt;
 pub mod utils;
 
 use std::collections::{BTreeMap, HashMap};
-use std::time::Duration;
 
 use anyhow::{anyhow, Result};
 use eth_trie_utils::nibbles::Nibbles;
@@ -14,16 +13,11 @@ use ethers::prelude::*;
 use ethers::types::GethDebugTracerType;
 use ethers::utils::rlp;
 use itertools::izip;
-use plonky2::field::goldilocks_field::GoldilocksField;
-use plonky2::plonk::config::KeccakGoldilocksConfig;
-use plonky2::util::timing::TimingTree;
-use plonky2_evm::all_stark::AllStark;
-use plonky2_evm::config::StarkConfig;
-use plonky2_evm::generation::{generate_traces, GenerationInputs, TrieInputs};
+use plonky2_evm::generation::{GenerationInputs, TrieInputs};
 use plonky2_evm::proof::BlockMetadata;
 use plonky2_evm::proof::{BlockHashes, TrieRoots};
-use plonky2_evm::prover::prove;
 use protocol_decoder::types::TxnProofGenIR;
+use tracing::info;
 
 use crate::mpt::{apply_diffs, insert_mpt, trim, Mpt};
 use crate::utils::{has_storage_deletion, keccak};
@@ -324,7 +318,7 @@ pub async fn gather_witness(tx: TxHash, provider: &Provider<Http>) -> Result<Vec
         .enumerate()
         .take(tx_index + 1)
     {
-        log::info!("Processing {}-th transaction: {:?}", i, tx.hash);
+        info!("Processing {}-th transaction: {:?}", i, tx.hash);
         let last_tx = i == block.transactions.len() - 1;
         let trace = provider
             .debug_trace_transaction(tx.hash, tracing_options_diff())

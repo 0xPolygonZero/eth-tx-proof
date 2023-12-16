@@ -1,4 +1,4 @@
-use common::prover_state::P_STATE;
+use common::prover_state::{MaybeOwned, P_STATE};
 use paladin::{
     operation::{FatalError, Monoid, Operation, Result},
     registry, RemoteExecute,
@@ -6,12 +6,12 @@ use paladin::{
 use plonky_block_proof_gen::{
     proof_gen::{generate_agg_proof, generate_block_proof, generate_txn_proof},
     proof_types::{AggregatableProof, GeneratedAggProof, GeneratedBlockProof},
-    prover_state::ProverState,
+    types::AllRecursiveCircuits,
 };
 use protocol_decoder::types::TxnProofGenIR;
 use serde::{Deserialize, Serialize};
 
-fn p_state() -> &'static ProverState {
+fn p_state() -> &'static MaybeOwned<'static, AllRecursiveCircuits> {
     P_STATE.get().expect("Prover state is not initialized")
 }
 

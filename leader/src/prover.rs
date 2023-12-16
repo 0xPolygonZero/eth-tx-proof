@@ -10,6 +10,7 @@ use plonky_block_proof_gen::{
 };
 use protocol_decoder::types::TxnProofGenIR;
 use serde::{Deserialize, Serialize};
+use tracing::info;
 
 #[derive(Debug, Deserialize, Serialize)]
 pub struct ProverInput {
@@ -22,7 +23,7 @@ impl ProverInput {
         runtime: &Runtime,
         _previous: Option<PlonkyProofIntern>,
     ) -> Result<GeneratedBlockProof> {
-        log::info!("Proving block");
+        info!("Proving block");
         let agg_proof = IndexedStream::from(self.proof_gen_ir)
             .map(&TxProof)
             .fold(&AggProof)
@@ -34,7 +35,7 @@ impl ProverInput {
                 .map(&BlockProof { prev: None })
                 .run(runtime)
                 .await?;
-            log::info!("Block proof generated");
+            info!("Block proof generated");
 
             Ok(block_proof.0)
         } else {

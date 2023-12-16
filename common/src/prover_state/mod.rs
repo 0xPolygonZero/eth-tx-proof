@@ -12,7 +12,7 @@
 use std::{fmt::Display, sync::OnceLock};
 
 use clap::ValueEnum;
-use plonky_block_proof_gen::prover_state::ProverState;
+use plonky_block_proof_gen::types::AllRecursiveCircuits;
 use tracing::info;
 
 pub mod circuit;
@@ -28,7 +28,7 @@ pub mod persistence;
 /// - This scheme works for both a cluster and a single machine. In particular,
 ///   whether imported from a worker node or a thread in the leader node
 ///   (in-memory mode), the prover state is initialized only once.
-pub static P_STATE: OnceLock<ProverState> = OnceLock::new();
+pub static P_STATE: OnceLock<MaybeOwned<'static, AllRecursiveCircuits>> = OnceLock::new();
 
 /// Specifies whether to persist the processed circuits.
 #[derive(Debug, Clone, Copy, ValueEnum)]
@@ -55,20 +55,34 @@ pub struct ProverStateConfig {
     pub persistence: CircuitPersistence,
 }
 
+pub enum MaybeOwned<'a, T> {
+    Owned(T),
+    Borrowed(&'a T),
+}
+
+impl<'a, T> std::ops::Deref for MaybeOwned<'a, T> {
+    type Target = T;
+
+    fn deref(&self) -> &Self::Target {
+        match self {
+            MaybeOwned::Owned(t) => t,
+            MaybeOwned::Borrowed(t) => t,
+        }
+    }
+}
+
 /// Initializes the global prover state.
 pub fn set_prover_state_from_config(
     ProverStateConfig {
         circuit_config,
         persistence,
     }: ProverStateConfig,
-) -> Result<(), ProverState> {
+) -> Result<(), MaybeOwned<'static, AllRecursiveCircuits>> {
     info!("initializing prover state...");
     let state = match persistence {
         CircuitPersistence::None => {
             info!("generating circuits...");
-            ProverState {
-                state: circuit_config.as_all_recursive_circuits(),
-            }
+            MaybeOwned::Owned(circuit_config.as_all_recursive_circuits())
         }
         CircuitPersistence::Disk => {
             info!("attempting to load preprocessed circuits from disk...");
@@ -76,16 +90,15 @@ pub fn set_prover_state_from_config(
             match disk_state {
                 Some(circuits) => {
                     info!("successfully loaded preprocessed circuits from disk");
-                    ProverState { state: circuits }
+                    MaybeOwned::Borrowed(circuits)
                 }
                 None => {
                     info!("failed to load preprocessed circuits from disk. generating circuits...");
                     let all_recursive_circuits = circuit_config.as_all_recursive_circuits();
                     info!("saving preprocessed circuits to disk");
                     persistence::to_disk(&all_recursive_circuits, &circuit_config);
-                    ProverState {
-                        state: all_recursive_circuits,
-                    }
+
+                    MaybeOwned::Owned(all_recursive_circuits)
                 }
             }
         }
