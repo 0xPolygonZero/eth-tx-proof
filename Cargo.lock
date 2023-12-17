@@ -3319,7 +3319,7 @@ checksum = "26072860ba924cbfa98ea39c8c19b4dd6a4a25423dbdf219c1eca91aa0cf6964"
 [[package]]
 name = "plonky2"
 version = "0.1.4"
-source = "git+https://github.com/0xPolygonZero/plonky2?rev=7efd147e0888c5c6754a4d7ee2691a2ff5c82072#7efd147e0888c5c6754a4d7ee2691a2ff5c82072"
+source = "git+https://github.com/0xPolygonZero/plonky2?rev=f8f6b07a3905185af302d58fb6b97c55d12e57be#f8f6b07a3905185af302d58fb6b97c55d12e57be"
 dependencies = [
  "ahash",
  "anyhow",
@@ -3343,7 +3343,7 @@ dependencies = [
 [[package]]
 name = "plonky2_evm"
 version = "0.1.1"
-source = "git+https://github.com/0xPolygonZero/plonky2?rev=7efd147e0888c5c6754a4d7ee2691a2ff5c82072#7efd147e0888c5c6754a4d7ee2691a2ff5c82072"
+source = "git+https://github.com/0xPolygonZero/plonky2?rev=f8f6b07a3905185af302d58fb6b97c55d12e57be#f8f6b07a3905185af302d58fb6b97c55d12e57be"
 dependencies = [
  "anyhow",
  "bytes",
@@ -3377,7 +3377,7 @@ dependencies = [
 [[package]]
 name = "plonky2_field"
 version = "0.1.1"
-source = "git+https://github.com/0xPolygonZero/plonky2?rev=7efd147e0888c5c6754a4d7ee2691a2ff5c82072#7efd147e0888c5c6754a4d7ee2691a2ff5c82072"
+source = "git+https://github.com/0xPolygonZero/plonky2?rev=f8f6b07a3905185af302d58fb6b97c55d12e57be#f8f6b07a3905185af302d58fb6b97c55d12e57be"
 dependencies = [
  "anyhow",
  "itertools 0.11.0",
@@ -3392,7 +3392,7 @@ dependencies = [
 [[package]]
 name = "plonky2_maybe_rayon"
 version = "0.1.1"
-source = "git+https://github.com/0xPolygonZero/plonky2?rev=7efd147e0888c5c6754a4d7ee2691a2ff5c82072#7efd147e0888c5c6754a4d7ee2691a2ff5c82072"
+source = "git+https://github.com/0xPolygonZero/plonky2?rev=f8f6b07a3905185af302d58fb6b97c55d12e57be#f8f6b07a3905185af302d58fb6b97c55d12e57be"
 dependencies = [
  "rayon",
 ]
@@ -3400,12 +3400,12 @@ dependencies = [
 [[package]]
 name = "plonky2_util"
 version = "0.1.1"
-source = "git+https://github.com/0xPolygonZero/plonky2?rev=7efd147e0888c5c6754a4d7ee2691a2ff5c82072#7efd147e0888c5c6754a4d7ee2691a2ff5c82072"
+source = "git+https://github.com/0xPolygonZero/plonky2?rev=f8f6b07a3905185af302d58fb6b97c55d12e57be#f8f6b07a3905185af302d58fb6b97c55d12e57be"
 
 [[package]]
 name = "plonky_block_proof_gen"
 version = "0.1.0"
-source = "git+https://github.com/0xPolygonZero/proof-protocol-decoder.git?rev=5188c2a183c78ca68b3c270764e5a26d16bb3493#5188c2a183c78ca68b3c270764e5a26d16bb3493"
+source = "git+https://github.com/0xPolygonZero/proof-protocol-decoder.git?rev=71c52459f31e133635b2508634be234b0323e108#71c52459f31e133635b2508634be234b0323e108"
 dependencies = [
  "ethereum-types",
  "log",
@@ -3581,7 +3581,7 @@ dependencies = [
 [[package]]
 name = "protocol_decoder"
 version = "0.1.0"
-source = "git+https://github.com/0xPolygonZero/proof-protocol-decoder.git?rev=5188c2a183c78ca68b3c270764e5a26d16bb3493#5188c2a183c78ca68b3c270764e5a26d16bb3493"
+source = "git+https://github.com/0xPolygonZero/proof-protocol-decoder.git?rev=71c52459f31e133635b2508634be234b0323e108#71c52459f31e133635b2508634be234b0323e108"
 dependencies = [
  "bytes",
  "ciborium",

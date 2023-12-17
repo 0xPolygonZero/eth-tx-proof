@@ -26,7 +26,7 @@ impl Operation for TxProof {
 
     fn execute(&self, input: Self::Input) -> Result<Self::Output> {
         let start = std::time::Instant::now();
-        let result = generate_txn_proof(p_state(), input).map_err(FatalError::from)?;
+        let result = generate_txn_proof(p_state(), input, None).map_err(FatalError::from)?;
         log::info!("generate transaction proof took {:?}", start.elapsed());
 
         Ok(result.into())

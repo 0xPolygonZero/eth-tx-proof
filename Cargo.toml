@@ -8,16 +8,12 @@ resolver = "2"
 ethers = "2.0.7"
 tokio = { version = "1", features = ["full"] }
 anyhow = "1.0.71"
-plonky2 = { git = "https://github.com/0xPolygonZero/plonky2", rev = "7efd147e0888c5c6754a4d7ee2691a2ff5c82072" }
-plonky2_evm = { git = "https://github.com/0xPolygonZero/plonky2", rev = "7efd147e0888c5c6754a4d7ee2691a2ff5c82072" }
+plonky2 = { git = "https://github.com/0xPolygonZero/plonky2", rev = "f8f6b07a3905185af302d58fb6b97c55d12e57be" }
+plonky2_evm = { git = "https://github.com/0xPolygonZero/plonky2", rev = "f8f6b07a3905185af302d58fb6b97c55d12e57be" }
 clap = { version = "4.4.11", features = ["derive", "env"] }
-protocol_decoder = { git = "https://github.com/0xPolygonZero/proof-protocol-decoder.git", rev = "5188c2a183c78ca68b3c270764e5a26d16bb3493" }
-plonky_block_proof_gen = { git = "https://github.com/0xPolygonZero/proof-protocol-decoder.git", rev = "5188c2a183c78ca68b3c270764e5a26d16bb3493" }
+protocol_decoder = { git = "https://github.com/0xPolygonZero/proof-protocol-decoder.git", rev = "71c52459f31e133635b2508634be234b0323e108" }
+plonky_block_proof_gen = { git = "https://github.com/0xPolygonZero/proof-protocol-decoder.git", rev = "71c52459f31e133635b2508634be234b0323e108" }
 dotenvy = "0.15.7"
 paladin-core = "0.4.1"
 serde = { version = "1.0.193", features = ["derive"] }
 tracing = "0.1"
-
-[patch.crates-io]
-plonky2 = { git = "https://github.com/0xPolygonZero/plonky2", rev = "7efd147e0888c5c6754a4d7ee2691a2ff5c82072" }
-plonky2_evm = { git = "https://github.com/0xPolygonZero/plonky2", rev = "7efd147e0888c5c6754a4d7ee2691a2ff5c82072" }

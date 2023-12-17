@@ -397,7 +397,7 @@ pub async fn gather_witness(tx: TxHash, provider: &Provider<Http>) -> Result<Vec
             },
             gas_used_before: gas_used,
             gas_used_after: gas_used + receipt.gas_used.unwrap(),
-            genesis_state_trie_root: H256::zero(),
+            checkpoint_state_trie_root: H256::zero(),
             trie_roots_after,
             txn_number_before: receipt.transaction_index.0[0].into(),
         };
