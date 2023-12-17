@@ -7,7 +7,6 @@ use common::prover_state::set_prover_state_from_config;
 use dotenvy::dotenv;
 use ethers::prelude::*;
 use leader::gather_witness;
-use leader::utils::init_env_logger;
 
 mod cli;
 mod prover;
@@ -19,14 +18,13 @@ use protocol_decoder::types::TxnProofGenIR;
 #[tokio::main]
 async fn main() -> Result<()> {
     dotenv().ok();
-    init_env_logger();
     let args = cli::Cli::parse();
 
     if let paladin::config::Runtime::InMemory = args.paladin.runtime {
         // If running in emulation mode, we'll need to initialize the prover
         // state here.
         if set_prover_state_from_config(args.prover_state_config.into()).is_err() {
-            log::warn!(
+            tracing::warn!(
                 "prover state already set. check the program logic to ensure it is only set once"
             );
         }

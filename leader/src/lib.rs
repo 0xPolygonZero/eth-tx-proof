@@ -317,7 +317,7 @@ pub async fn gather_witness(tx: TxHash, provider: &Provider<Http>) -> Result<Vec
         .enumerate()
         .take(tx_index + 1)
     {
-        log::info!("Processing {}-th transaction: {:?}", i, tx.hash);
+        tracing::info!("Processing {}-th transaction: {:?}", i, tx.hash);
         let last_tx = i == block.transactions.len() - 1;
         let trace = provider
             .debug_trace_transaction(tx.hash, tracing_options_diff())

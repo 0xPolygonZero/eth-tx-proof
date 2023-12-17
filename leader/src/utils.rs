@@ -1,6 +1,5 @@
 use ethers::prelude::*;
 use ethers::utils::keccak256;
-use flexi_logger::Logger;
 
 pub fn keccak<T: AsRef<[u8]> + Clone>(bytes: T) -> [u8; 32] {
     keccak256(bytes.clone())
@@ -28,10 +27,4 @@ pub fn has_storage_deletion(trace: &GethTrace) -> bool {
         }
     }
     false
-}
-
-pub fn init_env_logger() {
-    let _ = Logger::try_with_env_or_str("plonky2::util::timing=info")
-        .unwrap()
-        .start();
 }

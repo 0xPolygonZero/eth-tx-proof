@@ -17,3 +17,4 @@ dotenvy = "0.15.7"
 paladin-core = "0.4.1"
 serde = { version = "1.0.193", features = ["derive"] }
 tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
