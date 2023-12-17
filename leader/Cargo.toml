@@ -15,6 +15,7 @@ plonky_block_proof_gen = { workspace = true }
 anyhow = { workspace = true }
 serde = { workspace = true }
 paladin-core = { workspace = true }
+dotenvy = { workspace = true }
 
 ethers = "2.0.7"
 flexi_logger = { version = "0.25.1", features = ["async"] }

@@ -4,6 +4,7 @@ use std::io::{Read, Write};
 use anyhow::Result;
 use clap::Parser;
 use common::prover_state::set_prover_state_from_config;
+use dotenvy::dotenv;
 use ethers::prelude::*;
 use leader::gather_witness;
 use leader::utils::init_env_logger;
@@ -17,6 +18,7 @@ use protocol_decoder::types::TxnProofGenIR;
 
 #[tokio::main]
 async fn main() -> Result<()> {
+    dotenv().ok();
     init_env_logger();
     let args = cli::Cli::parse();
 

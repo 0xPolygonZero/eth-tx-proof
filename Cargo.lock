@@ -2581,6 +2581,7 @@ dependencies = [
  "anyhow",
  "clap",
  "common",
+ "dotenvy",
  "eth_trie_utils",
  "ethers",
  "flexi_logger",
