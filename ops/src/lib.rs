@@ -11,6 +11,7 @@ use plonky_block_proof_gen::{
 };
 use protocol_decoder::types::TxnProofGenIR;
 use serde::{Deserialize, Serialize};
+use tracing::{info_span, Level};
 
 fn p_state() -> &'static ProverState {
     P_STATE.get().expect("Prover state is not initialized")
@@ -26,18 +27,27 @@ impl Operation for TxProof {
     type Output = AggregatableProof;
 
     fn execute(&self, input: Self::Input) -> Result<Self::Output> {
-        let tx: Option<Transaction> = input
-            .gen_inputs
-            .signed_txn
-            .as_ref()
-            .and_then(|bytes| rlp::decode(bytes).ok());
-        if let Some(tx) = tx {
-            tracing::info!("generating proof for {:?}", tx.hash);
-        }
+        let tx_hash = rlp::decode::<Transaction>(
+            input
+                .gen_inputs
+                .signed_txn
+                .as_ref()
+                .expect("signed txn is missing"),
+        )
+        .expect("failed to decode signed transaction")
+        .hash;
+
+        let _span = info_span!("generate proof", tx_hash = ?tx_hash).entered();
+        tracing::event!(Level::INFO, "generating proof for {:?}", tx_hash);
 
         let start = std::time::Instant::now();
         let result = generate_txn_proof(p_state(), input, None).map_err(FatalError::from)?;
-        tracing::info!("generate transaction proof took {:?}", start.elapsed());
+        tracing::event!(
+            Level::INFO,
+            "generate transaction proof for {:?} took {:?}",
+            tx_hash,
+            start.elapsed()
+        );
 
         Ok(result.into())
     }
