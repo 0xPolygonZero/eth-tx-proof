@@ -1,6 +1,5 @@
-use std::collections::{BTreeMap, HashMap};
-use std::sync::Arc;
-
+use crate::utils::keccak;
+use crate::EMPTY_HASH;
 use eth_trie_utils::nibbles::Nibbles;
 use eth_trie_utils::partial_trie::PartialTrie;
 use eth_trie_utils::partial_trie::{HashedPartialTrie, Node};
@@ -8,9 +7,8 @@ use eth_trie_utils::trie_subsets::create_trie_subset;
 use ethers::prelude::*;
 use ethers::utils::rlp;
 use plonky2_evm::generation::mpt::AccountRlp;
-
-use crate::utils::keccak;
-use crate::EMPTY_HASH;
+use std::collections::{BTreeMap, HashMap};
+use std::sync::Arc;
 
 #[derive(Clone, Debug)]
 pub struct MptNode(Vec<u8>);
@@ -49,9 +47,9 @@ impl Mpt {
                         children.push(Node::Empty.into());
                         continue;
                     }
-                    children.push(Arc::new(Box::new(
-                        self.to_partial_trie_helper(H256::from_slice(&a[i])),
-                    )));
+                    children.push(
+                        Arc::new(Box::new(self.to_partial_trie_helper(H256::from_slice(&a[i]))))
+                    );
                 }
                 Node::Branch {
                     value,
@@ -64,9 +62,9 @@ impl Mpt {
                     let ext_prefix = Nibbles::from_bytes_be(&a[0][1..]).unwrap();
                     Node::Extension {
                         nibbles: ext_prefix,
-                        child: Arc::new(Box::new(
-                            self.to_partial_trie_helper(H256::from_slice(&a[1])),
-                        )),
+                        child: Arc::new(
+                            Box::new(self.to_partial_trie_helper(H256::from_slice(&a[1])))
+                        ),
                     }
                     .into()
                 }
@@ -83,9 +81,9 @@ impl Mpt {
                     ext_prefix.push_nibble_front(b);
                     Node::Extension {
                         nibbles: ext_prefix,
-                        child: Arc::new(Box::new(
-                            self.to_partial_trie_helper(H256::from_slice(&a[1])),
-                        )),
+                        child: Arc::new(
+                            Box::new(self.to_partial_trie_helper(H256::from_slice(&a[1])))
+                        ),
                     }
                     .into()
                 }
@@ -237,21 +235,21 @@ pub fn apply_diffs(
     for (addr, acc) in &diff.post {
         if !diff.pre.contains_key(addr) {
             // New account
-            let code_hash = acc
-                .code
-                .clone()
-                .map(|s| {
-                    if s.is_empty() {
-                        EMPTY_HASH
-                    } else {
-                        let code = s.split_at(2).1;
-                        let bytes = hex::decode(code).unwrap();
-                        let h = H256(keccak(&bytes));
-                        contract_code.insert(h, bytes);
-                        h
-                    }
-                })
-                .unwrap_or(EMPTY_HASH);
+            let code_hash =
+                acc.code
+                    .clone()
+                    .map(|s| {
+                        if s.is_empty() {
+                            EMPTY_HASH
+                        } else {
+                            let code = s.split_at(2).1;
+                            let bytes = hex::decode(code).unwrap();
+                            let h = H256(keccak(&bytes));
+                            contract_code.insert(h, bytes);
+                            h
+                        }
+                    })
+                    .unwrap_or(EMPTY_HASH);
             let account = AccountRlp {
                 nonce: acc.nonce.unwrap_or(U256::zero()),
                 balance: acc.balance.unwrap_or(U256::zero()),

@@ -792,11 +792,9 @@ name = "common"
 version = "0.1.0"
 dependencies = [
  "clap",
- "memmap",
  "plonky2",
  "plonky2_evm",
  "plonky_block_proof_gen",
- "protocol_decoder",
  "thiserror",
  "tracing",
 ]
@@ -2583,12 +2581,12 @@ dependencies = [
  "anyhow",
  "clap",
  "common",
- "dotenvy",
  "eth_trie_utils",
  "ethers",
  "flexi_logger",
  "hex",
  "itertools 0.11.0",
+ "log",
  "ops",
  "paladin-core",
  "plonky2",
@@ -2600,8 +2598,6 @@ dependencies = [
  "serde",
  "serde_json",
  "tokio",
- "tracing",
- "tracing-subscriber",
 ]
 
 [[package]]
@@ -2700,16 +2696,6 @@ name = "memchr"
 version = "2.6.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "f665ee40bc4a3c5590afb1e9677db74a508659dfd71e126420da8274909a0167"
-
-[[package]]
-name = "memmap"
-version = "0.7.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "6585fd95e7bb50d6cc31e20d4cf9afb4e2ba16c5846fc76793f11218da9c475b"
-dependencies = [
- "libc",
- "winapi",
-]
 
 [[package]]
 name = "memoffset"
@@ -3418,7 +3404,7 @@ source = "git+https://github.com/0xPolygonZero/plonky2?rev=7efd147e0888c5c6754a4
 [[package]]
 name = "plonky_block_proof_gen"
 version = "0.1.0"
-source = "git+https://github.com/0xPolygonZero/proof-protocol-decoder.git?rev=70f79451f80a8005155b20075ba54678de0e6dd0#70f79451f80a8005155b20075ba54678de0e6dd0"
+source = "git+https://github.com/0xPolygonZero/proof-protocol-decoder.git?rev=5188c2a183c78ca68b3c270764e5a26d16bb3493#5188c2a183c78ca68b3c270764e5a26d16bb3493"
 dependencies = [
  "ethereum-types",
  "log",
@@ -3594,7 +3580,7 @@ dependencies = [
 [[package]]
 name = "protocol_decoder"
 version = "0.1.0"
-source = "git+https://github.com/0xPolygonZero/proof-protocol-decoder.git?rev=70f79451f80a8005155b20075ba54678de0e6dd0#70f79451f80a8005155b20075ba54678de0e6dd0"
+source = "git+https://github.com/0xPolygonZero/proof-protocol-decoder.git?rev=5188c2a183c78ca68b3c270764e5a26d16bb3493#5188c2a183c78ca68b3c270764e5a26d16bb3493"
 dependencies = [
  "bytes",
  "ciborium",

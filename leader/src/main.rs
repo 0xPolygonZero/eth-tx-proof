@@ -4,24 +4,19 @@ use std::io::{Read, Write};
 use anyhow::Result;
 use clap::Parser;
 use common::prover_state::set_prover_state_from_config;
-use dotenvy::dotenv;
 use ethers::prelude::*;
 use leader::gather_witness;
+use leader::utils::init_env_logger;
 
 mod cli;
 mod prover;
 use cli::Command;
-use leader::utils::init_env_logger;
 use ops::register;
 use paladin::runtime::Runtime;
 use protocol_decoder::types::TxnProofGenIR;
-mod init;
 
 #[tokio::main]
 async fn main() -> Result<()> {
-    dotenv().ok();
-
-    init::tracing();
     init_env_logger();
     let args = cli::Cli::parse();
 
@@ -29,7 +24,7 @@ async fn main() -> Result<()> {
         // If running in emulation mode, we'll need to initialize the prover
         // state here.
         if set_prover_state_from_config(args.prover_state_config.into()).is_err() {
-            tracing::warn!(
+            log::warn!(
                 "prover state already set. check the program logic to ensure it is only set once"
             );
         }
@@ -57,8 +52,8 @@ async fn main() -> Result<()> {
             std::io::stdout().write_all(&serde_json::to_vec(&proof)?)?;
         }
         Command::GenerateAndProve {
-            rpc_url: _,
-            transaction_hash: _,
+            rpc_url,
+            transaction_hash,
         } => {
             unimplemented!()
         }

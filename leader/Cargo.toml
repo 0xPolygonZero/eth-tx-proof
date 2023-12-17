@@ -15,12 +15,10 @@ plonky_block_proof_gen = { workspace = true }
 anyhow = { workspace = true }
 serde = { workspace = true }
 paladin-core = { workspace = true }
-dotenvy = { workspace = true }
-tracing-subscriber = { workspace = true }
-tracing = { workspace = true }
 
 ethers = "2.0.7"
 flexi_logger = { version = "0.25.1", features = ["async"] }
+log = "0.4.14"
 itertools = "0.11.0"
 eth_trie_utils = { git = "https://github.com/0xPolygonZero/eth_trie_utils.git", rev = "e9ec4ec2aa2ae976b7c699ef40c1ffc716d87ed5" }
 hex = "0.4.3"
