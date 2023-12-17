@@ -2906,11 +2906,13 @@ name = "ops"
 version = "0.1.0"
 dependencies = [
  "common",
- "log",
+ "ethers",
  "paladin-core",
  "plonky_block_proof_gen",
  "protocol_decoder",
+ "rlp",
  "serde",
+ "tracing",
 ]
 
 [[package]]

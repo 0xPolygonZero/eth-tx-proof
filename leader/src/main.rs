@@ -14,10 +14,13 @@ use cli::Command;
 use ops::register;
 use paladin::runtime::Runtime;
 use protocol_decoder::types::TxnProofGenIR;
+mod init;
 
 #[tokio::main]
 async fn main() -> Result<()> {
     dotenv().ok();
+    init::tracing();
+
     let args = cli::Cli::parse();
 
     if let paladin::config::Runtime::InMemory = args.paladin.runtime {

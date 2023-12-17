@@ -1,4 +1,5 @@
 use common::prover_state::P_STATE;
+use ethers::types::Transaction;
 use paladin::{
     operation::{FatalError, Monoid, Operation, Result},
     registry, RemoteExecute,
@@ -25,9 +26,18 @@ impl Operation for TxProof {
     type Output = AggregatableProof;
 
     fn execute(&self, input: Self::Input) -> Result<Self::Output> {
+        let tx: Option<Transaction> = input
+            .gen_inputs
+            .signed_txn
+            .as_ref()
+            .and_then(|bytes| rlp::decode(bytes).ok());
+        if let Some(tx) = tx {
+            tracing::info!("generating proof for {:?}", tx.hash);
+        }
+
         let start = std::time::Instant::now();
         let result = generate_txn_proof(p_state(), input, None).map_err(FatalError::from)?;
-        log::info!("generate transaction proof took {:?}", start.elapsed());
+        tracing::info!("generate transaction proof took {:?}", start.elapsed());
 
         Ok(result.into())
     }
@@ -42,7 +52,7 @@ impl Monoid for AggProof {
     fn combine(&self, a: Self::Elem, b: Self::Elem) -> Result<Self::Elem> {
         let start = std::time::Instant::now();
         let result = generate_agg_proof(p_state(), &a, &b).map_err(FatalError::from)?;
-        log::info!("generate aggregation proof took {:?}", start.elapsed());
+        tracing::info!("generate aggregation proof took {:?}", start.elapsed());
 
         Ok(result.into())
     }
@@ -66,7 +76,7 @@ impl Operation for BlockProof {
         let start = std::time::Instant::now();
         let proof = generate_block_proof(p_state(), self.prev.as_ref(), &input)
             .map_err(FatalError::from)?;
-        log::info!("generate block proof took {:?}", start.elapsed());
+        tracing::info!("generate block proof took {:?}", start.elapsed());
 
         Ok(proof)
     }

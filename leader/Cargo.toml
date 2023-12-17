@@ -18,8 +18,8 @@ paladin-core = { workspace = true }
 dotenvy = { workspace = true }
 tracing = { workspace = true }
 tracing-subscriber = { workspace = true }
+ethers = { workspace = true }
 
-ethers = "2.0.7"
 itertools = "0.11.0"
 eth_trie_utils = { git = "https://github.com/0xPolygonZero/eth_trie_utils.git", rev = "e9ec4ec2aa2ae976b7c699ef40c1ffc716d87ed5" }
 hex = "0.4.3"
