@@ -54,8 +54,8 @@ async fn main() -> Result<()> {
             std::io::stdout().write_all(&serde_json::to_vec(&proof)?)?;
         }
         Command::GenerateAndProve {
-            rpc_url,
-            transaction_hash,
+            rpc_url: _,
+            transaction_hash: _,
         } => {
             unimplemented!()
         }
