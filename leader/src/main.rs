@@ -23,18 +23,6 @@ async fn main() -> Result<()> {
 
     let args = cli::Cli::parse();
 
-    if let paladin::config::Runtime::InMemory = args.paladin.runtime {
-        // If running in emulation mode, we'll need to initialize the prover
-        // state here.
-        if set_prover_state_from_config(args.prover_state_config.into()).is_err() {
-            tracing::warn!(
-                "prover state already set. check the program logic to ensure it is only set once"
-            );
-        }
-    }
-
-    let runtime = Runtime::from_config(&args.paladin, register()).await?;
-
     match args.command {
         Command::Rpc {
             rpc_url,
@@ -45,20 +33,30 @@ async fn main() -> Result<()> {
             let gen_inputs = gather_witness(transaction_hash, &provider).await?;
             std::io::stdout().write_all(&serde_json::to_vec(&gen_inputs)?)?;
         }
-        Command::Prove { input_witness } => {
+        Command::Prove {
+            input_witness,
+            paladin,
+            prover_state_config,
+        } => {
+            if let paladin::config::Runtime::InMemory = paladin.runtime {
+                // If running in emulation mode, we'll need to initialize the prover
+                // state here.
+                if set_prover_state_from_config(prover_state_config.into()).is_err() {
+                    tracing::warn!(
+                        "prover state already set. check the program logic to ensure it is only set once"
+                    );
+                }
+            }
+
             let mut file = std::fs::File::open(&input_witness)?;
             let mut buffer = String::new();
             file.read_to_string(&mut buffer)?;
             let proof_gen_ir: Vec<TxnProofGenIR> = serde_json::from_str(&buffer)?;
             let prover_input = prover::ProverInput { proof_gen_ir };
+            let runtime = Runtime::from_config(&paladin, register()).await?;
             let proof = prover_input.prove(&runtime, None).await?;
             std::io::stdout().write_all(&serde_json::to_vec(&proof)?)?;
-        }
-        Command::GenerateAndProve {
-            rpc_url: _,
-            transaction_hash: _,
-        } => {
-            unimplemented!()
+            runtime.close().await?;
         }
     }
 

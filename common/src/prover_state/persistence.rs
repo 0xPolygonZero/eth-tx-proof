@@ -16,7 +16,10 @@ type Config = PoseidonGoldilocksConfig;
 const SIZE: usize = 2;
 const PROVER_STATE_FILE_PREFIX: &str = "./prover_state";
 
-fn get_serializers() -> (DefaultGateSerializer, DefaultGeneratorSerializer<Config, 2>) {
+fn get_serializers() -> (
+    DefaultGateSerializer,
+    DefaultGeneratorSerializer<Config, SIZE>,
+) {
     let gate_serializer = DefaultGateSerializer;
     let witness_serializer: DefaultGeneratorSerializer<Config, SIZE> = DefaultGeneratorSerializer {
         _phantom: Default::default(),

@@ -34,7 +34,7 @@ pub async fn get_proof(
     block_number: U64,
     provider: &Provider<Http>,
 ) -> Result<(Vec<Bytes>, Vec<StorageProof>, H256, bool)> {
-    // log::info!("Proof {:?}: {:?} {:?}", block_number, address, locations);
+    // tracing::info!("Proof {:?}: {:?} {:?}", block_number, address, locations);
     // println!("Proof {:?}: {:?} {:?}", block_number, address, locations);
     let proof = provider.get_proof(address, locations, Some(block_number.into()));
     let proof = proof.await?;
