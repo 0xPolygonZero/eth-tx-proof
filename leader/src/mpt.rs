@@ -331,7 +331,10 @@ pub fn trim(
                 .keys()
                 .map(|slot| Nibbles::from_bytes_be(&keccak(slot.0)).unwrap())
                 .collect::<Vec<_>>();
-            *t = create_trie_subset(t, keys).unwrap();
+
+            if let Ok(trie) = create_trie_subset(t, keys) {
+                *t = trie;
+            }
         }
     }
     (new_state_trie, storage_mpts)
