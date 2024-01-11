@@ -18,3 +18,7 @@ paladin-core = "0.4.1"
 serde = { version = "1.0.193", features = ["derive"] }
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+
+[patch."https://github.com/0xPolygonZero/plonky2"]
+plonky2 = { git = "https://github.com/0xPolygonZero/plonky2?rev=05fa9e8ef14125e2aa315dc567c692191bc2f961" }
+plonky2_evm = { git = "https://github.com/0xPolygonZero/plonky2?rev=05fa9e8ef14125e2aa315dc567c692191bc2f961" }
