@@ -11,10 +11,18 @@ anyhow = "1.0.71"
 plonky2 = { git = "https://github.com/0xPolygonZero/plonky2", rev = "f8f6b07a3905185af302d58fb6b97c55d12e57be" }
 plonky2_evm = { git = "https://github.com/0xPolygonZero/plonky2", rev = "f8f6b07a3905185af302d58fb6b97c55d12e57be" }
 clap = { version = "4.4.11", features = ["derive", "env"] }
-protocol_decoder = { git = "https://github.com/0xPolygonZero/proof-protocol-decoder.git", rev = "71c52459f31e133635b2508634be234b0323e108" }
-plonky_block_proof_gen = { git = "https://github.com/0xPolygonZero/proof-protocol-decoder.git", rev = "71c52459f31e133635b2508634be234b0323e108" }
+protocol_decoder = { git = "https://github.com/0xPolygonZero/proof-protocol-decoder.git", rev = "2c58168403ba92281b157680beac5593aefcb699" }
+plonky_block_proof_gen = { git = "https://github.com/0xPolygonZero/proof-protocol-decoder.git", rev = "2c58168403ba92281b157680beac5593aefcb699" }
 dotenvy = "0.15.7"
 paladin-core = "0.4.1"
 serde = { version = "1.0.193", features = ["derive"] }
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+
+# TODO: Remove once we update to the latest plonky2!
+[patch."https://github.com/0xPolygonZero/eth_trie_utils.git"]
+eth_trie_utils = { git = "https://github.com/0xPolygonZero/eth_trie_utils.git?rev=7fc3c3f54b3cec9c6fc5ffc5230910bd1cb77f76" }
+
+[patch."https://github.com/0xPolygonZero/proof-protocol-decoder.git"]
+protocol_decoder = { git = "https://github.com/0xPolygonZero/proof-protocol-decoder.git?rev=2c58168403ba92281b157680beac5593aefcb699" }
+plonky_block_proof_gen = { git = "https://github.com/0xPolygonZero/proof-protocol-decoder.git?rev=2c58168403ba92281b157680beac5593aefcb699" }

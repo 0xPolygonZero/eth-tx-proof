@@ -1357,7 +1357,7 @@ dependencies = [
 [[package]]
 name = "eth_trie_utils"
 version = "0.6.0"
-source = "git+https://github.com/0xPolygonZero/eth_trie_utils.git?rev=e9ec4ec2aa2ae976b7c699ef40c1ffc716d87ed5#e9ec4ec2aa2ae976b7c699ef40c1ffc716d87ed5"
+source = "git+https://github.com/0xPolygonZero/eth_trie_utils.git?rev=7fc3c3f54b3cec9c6fc5ffc5230910bd1cb77f76#7fc3c3f54b3cec9c6fc5ffc5230910bd1cb77f76"
 dependencies = [
  "bytes",
  "enum-as-inner 0.5.1",
@@ -3378,7 +3378,7 @@ source = "git+https://github.com/0xPolygonZero/plonky2?rev=f8f6b07a3905185af302d
 [[package]]
 name = "plonky_block_proof_gen"
 version = "0.1.0"
-source = "git+https://github.com/0xPolygonZero/proof-protocol-decoder.git?rev=71c52459f31e133635b2508634be234b0323e108#71c52459f31e133635b2508634be234b0323e108"
+source = "git+https://github.com/0xPolygonZero/proof-protocol-decoder.git?rev=2c58168403ba92281b157680beac5593aefcb699#71c52459f31e133635b2508634be234b0323e108"
 dependencies = [
  "ethereum-types",
  "log",
@@ -3554,7 +3554,7 @@ dependencies = [
 [[package]]
 name = "protocol_decoder"
 version = "0.1.0"
-source = "git+https://github.com/0xPolygonZero/proof-protocol-decoder.git?rev=71c52459f31e133635b2508634be234b0323e108#71c52459f31e133635b2508634be234b0323e108"
+source = "git+https://github.com/0xPolygonZero/proof-protocol-decoder.git?rev=2c58168403ba92281b157680beac5593aefcb699#71c52459f31e133635b2508634be234b0323e108"
 dependencies = [
  "bytes",
  "ciborium",
