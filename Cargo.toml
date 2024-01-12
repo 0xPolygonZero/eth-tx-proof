@@ -8,17 +8,13 @@ resolver = "2"
 ethers = "2.0.7"
 tokio = { version = "1", features = ["full"] }
 anyhow = "1.0.71"
-plonky2 = { git = "https://github.com/0xPolygonZero/plonky2", rev = "05fa9e8ef14125e2aa315dc567c692191bc2f961" }
-plonky2_evm = { git = "https://github.com/0xPolygonZero/plonky2", rev = "05fa9e8ef14125e2aa315dc567c692191bc2f961" }
+plonky2 = { git = "https://github.com/0xPolygonZero/plonky2", branch = "lock/benchmarks" }
+plonky2_evm = { git = "https://github.com/0xPolygonZero/plonky2", branch = "lock/benchmarks" }
 clap = { version = "4.4.11", features = ["derive", "env"] }
-protocol_decoder = { git = "https://github.com/0xPolygonZero/proof-protocol-decoder.git", rev = "e91b01ad0ea3cf3c191c44c8fc18ce43088bd5a0" }
-plonky_block_proof_gen = { git = "https://github.com/0xPolygonZero/proof-protocol-decoder.git", rev = "e91b01ad0ea3cf3c191c44c8fc18ce43088bd5a0" }
+protocol_decoder = { git = "https://github.com/0xPolygonZero/proof-protocol-decoder.git", branch = "wills_plonky2_fix_cherrypicked" }
+plonky_block_proof_gen = { git = "https://github.com/0xPolygonZero/proof-protocol-decoder.git", branch = "wills_plonky2_fix_cherrypicked" }
 dotenvy = "0.15.7"
 paladin-core = "0.4.1"
 serde = { version = "1.0.193", features = ["derive"] }
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
-
-[patch."https://github.com/0xPolygonZero/plonky2"]
-plonky2 = { git = "https://github.com/0xPolygonZero/plonky2?rev=05fa9e8ef14125e2aa315dc567c692191bc2f961" }
-plonky2_evm = { git = "https://github.com/0xPolygonZero/plonky2?rev=05fa9e8ef14125e2aa315dc567c692191bc2f961" }
