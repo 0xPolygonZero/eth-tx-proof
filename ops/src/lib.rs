@@ -71,16 +71,20 @@ fn generate_agg_proof_with_identity(
 ) -> Result<AggregatableProofWithIdentity> {
     match (lhs_child, rhs_child) {
         (AggregatableProofWithIdentity::Agg(lhs), AggregatableProofWithIdentity::Agg(rhs)) => {
+            tracing::info!("generating agg proof");
             let result = generate_agg_proof(p_state, &lhs, &rhs).map_err(FatalError::from)?;
             Ok(AggregatableProofWithIdentity::Agg(result.into()))
         }
         (AggregatableProofWithIdentity::Unit, AggregatableProofWithIdentity::Agg(rhs)) => {
+            tracing::info!("encountered lhs unit");
             Ok(AggregatableProofWithIdentity::Agg(rhs))
         }
         (AggregatableProofWithIdentity::Agg(lhs), AggregatableProofWithIdentity::Unit) => {
+            tracing::info!("encountered rhs unit");
             Ok(AggregatableProofWithIdentity::Agg(lhs))
         }
         (AggregatableProofWithIdentity::Unit, AggregatableProofWithIdentity::Unit) => {
+            tracing::info!("encountered both lhs and rhs units");
             Ok(AggregatableProofWithIdentity::Unit)
         }
     }
