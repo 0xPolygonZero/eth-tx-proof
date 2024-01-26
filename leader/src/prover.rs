@@ -1,7 +1,8 @@
 use anyhow::{bail, Result};
-use ops::{AggProof, BlockProof, TxProof};
+use ops::{AggProof, AggregatableProofWithIdentity, BlockProof, TxProof};
 use paladin::{
     directive::{Directive, IndexedStream, Literal},
+    operation::{Monoid, Operation},
     runtime::Runtime,
 };
 use plonky_block_proof_gen::{
@@ -9,6 +10,7 @@ use plonky_block_proof_gen::{
     types::PlonkyProofIntern,
 };
 use protocol_decoder::types::TxnProofGenIR;
+use rayon::prelude::*;
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Deserialize, Serialize)]
@@ -29,7 +31,7 @@ impl ProverInput {
             .run(runtime)
             .await?;
 
-        if let AggregatableProof::Agg(proof) = agg_proof {
+        if let AggregatableProofWithIdentity::Agg(AggregatableProof::Agg(proof)) = agg_proof {
             let block_proof = Literal(proof)
                 .map(&BlockProof { prev: None })
                 .run(runtime)
@@ -37,6 +39,28 @@ impl ProverInput {
             tracing::info!("Block proof generated");
 
             Ok(block_proof.0)
+        } else {
+            bail!("AggProof is is not GeneratedAggProof")
+        }
+    }
+
+    pub fn prove_in_memory(self) -> Result<GeneratedBlockProof> {
+        tracing::info!("Proving block");
+        let agg_proof = self
+            .proof_gen_ir
+            .into_par_iter()
+            .map(|tx| TxProof.execute(tx).unwrap())
+            .reduce(
+                || AggregatableProofWithIdentity::Unit,
+                |a, b| AggProof.combine(a, b).unwrap(),
+            );
+
+        if let AggregatableProofWithIdentity::Agg(AggregatableProof::Agg(proof)) = agg_proof {
+            let b_proof = BlockProof { prev: None };
+            let block_proof = b_proof.execute(proof).unwrap();
+            tracing::info!("Block proof generated");
+
+            Ok(block_proof)
         } else {
             bail!("AggProof is is not GeneratedAggProof")
         }

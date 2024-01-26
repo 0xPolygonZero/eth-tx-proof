@@ -53,10 +53,15 @@ async fn main() -> Result<()> {
             file.read_to_string(&mut buffer)?;
             let proof_gen_ir: Vec<TxnProofGenIR> = serde_json::from_str(&buffer)?;
             let prover_input = prover::ProverInput { proof_gen_ir };
-            let runtime = Runtime::from_config(&paladin, register()).await?;
-            let proof = prover_input.prove(&runtime, None).await?;
-            std::io::stdout().write_all(&serde_json::to_vec(&proof)?)?;
-            runtime.close().await?;
+            if let paladin::config::Runtime::InMemory = paladin.runtime {
+                let proof = prover_input.prove_in_memory()?;
+                std::io::stdout().write_all(&serde_json::to_vec(&proof)?)?;
+            } else {
+                let runtime = Runtime::from_config(&paladin, register()).await?;
+                let proof = prover_input.prove(&runtime, None).await?;
+                std::io::stdout().write_all(&serde_json::to_vec(&proof)?)?;
+                runtime.close().await?;
+            };
         }
     }
 
