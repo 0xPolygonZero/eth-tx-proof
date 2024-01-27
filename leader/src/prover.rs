@@ -15,7 +15,6 @@ use plonky_block_proof_gen::{
 use protocol_decoder::types::TxnProofGenIR;
 use rayon::prelude::*;
 use serde::{Deserialize, Serialize};
-use tracing::{info_span, Level};
 
 #[derive(Debug, Deserialize, Serialize)]
 pub struct ProverInput {
@@ -49,9 +48,7 @@ impl ProverInput {
     }
 
     pub fn prove_in_memory(self, paralellism: usize) -> Result<GeneratedBlockProof> {
-        let span = info_span!("generate tx proofs").entered();
-        let start = std::time::Instant::now();
-        tracing::event!(Level::INFO, "generating tx proofs");
+        tracing::info!("Proving block");
         let counter = Arc::new((Mutex::new(0), Condvar::new()));
 
         let txs = self.proof_gen_ir.into_par_iter().map(|tx| {
@@ -69,31 +66,16 @@ impl ProverInput {
             cvar.notify_all();
             proof
         });
-        tracing::event!(Level::INFO, "generate tx proofs took {:?}", start.elapsed());
-        span.exit();
 
-        let span = info_span!("aggregate proofs").entered();
-        let start = std::time::Instant::now();
-        tracing::event!(Level::INFO, "aggregating proofs");
         let agg_proof = txs.reduce(
             || AggregatableProofWithIdentity::Unit,
             |a, b| AggProof.combine(a, b).unwrap(),
         );
-        tracing::event!(Level::INFO, "aggregate proofs took {:?}", start.elapsed());
-        span.exit();
 
         if let AggregatableProofWithIdentity::Agg(AggregatableProof::Agg(proof)) = agg_proof {
-            let span = info_span!("generate block proof").entered();
-            let start = std::time::Instant::now();
-            tracing::event!(Level::INFO, "generating block proof");
             let b_proof = BlockProof { prev: None };
             let block_proof = b_proof.execute(proof).unwrap();
-            tracing::event!(
-                Level::INFO,
-                "generate block proof took {:?}",
-                start.elapsed()
-            );
-            span.exit();
+            tracing::info!("Block proof generated");
 
             Ok(block_proof)
         } else {
