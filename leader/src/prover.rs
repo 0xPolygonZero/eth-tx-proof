@@ -1,5 +1,7 @@
+use std::sync::Condvar;
+use std::sync::{Arc, Mutex};
+
 use anyhow::{bail, Result};
-use ethers::core::k256::sha2::digest::typenum::Le;
 use ops::{AggProof, AggregatableProofWithIdentity, BlockProof, TxProof};
 use paladin::{
     directive::{Directive, IndexedStream, Literal},
@@ -46,14 +48,27 @@ impl ProverInput {
         }
     }
 
-    pub fn prove_in_memory(self) -> Result<GeneratedBlockProof> {
+    pub fn prove_in_memory(self, paralellism: usize) -> Result<GeneratedBlockProof> {
         let span = info_span!("generate tx proofs").entered();
         let start = std::time::Instant::now();
         tracing::event!(Level::INFO, "generating tx proofs");
-        let txs = self
-            .proof_gen_ir
-            .into_par_iter()
-            .map(|tx| TxProof.execute(tx).unwrap());
+        let counter = Arc::new((Mutex::new(0), Condvar::new()));
+
+        let txs = self.proof_gen_ir.into_par_iter().map(|tx| {
+            let (lock, cvar) = &*counter;
+            let mut count = lock.lock().unwrap();
+            while *count >= paralellism {
+                count = cvar.wait(count).unwrap();
+            }
+            *count += 1;
+            drop(count);
+
+            let proof = TxProof.execute(tx).unwrap();
+            let mut count = lock.lock().unwrap();
+            *count -= 1;
+            cvar.notify_all();
+            proof
+        });
         tracing::event!(Level::INFO, "generate tx proofs took {:?}", start.elapsed());
         span.exit();
 
