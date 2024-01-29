@@ -45,7 +45,7 @@ proving either with the `in-memory` runtime or the `amqp` runtime.
 
 ### In Memory Proving
 
-Running the prover with the `in-memory` setup requires no setup. You
+Running the prover with the `in-memory` flag requires no setup. You
 can attempt to generate a proof with a command like this.
 
 ```bash
