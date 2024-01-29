@@ -1,0 +1,99 @@
+[Unit]
+Description=Paladin Prover Service
+Documentation=https://github.com/0xPolygonZero/eth-tx-proof/
+
+# Bring this up after the network is online
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+ExecStart=paladin-worker --runtime amqp --amqp-uri=amqp://localhost:5672
+
+MemoryHigh=750G
+MemoryMax=800G
+MemorySwapMax=2000G
+
+Restart=on-failure
+RestartSec=5s
+
+Type=simple
+
+User=root
+Group=root
+
+Environment=RUST_BACKTRACE=1
+Environment=RUST_LOG=info
+Environment=RAYON_NUM_THREADS=180
+Environment=RUST_MIN_STACK=33554432
+Environment=ARITHMETIC_CIRCUIT_SIZE="15..28"
+Environment=BYTE_PACKING_CIRCUIT_SIZE="9..28"
+Environment=CPU_CIRCUIT_SIZE="12..28"
+Environment=KECCAK_CIRCUIT_SIZE="14..28"
+Environment=KECCAK_SPONGE_CIRCUIT_SIZE="9..28"
+Environment=LOGIC_CIRCUIT_SIZE="12..28"
+Environment=MEMORY_CIRCUIT_SIZE="17..30"
+
+TimeoutStartSec=infinity
+TimeoutStopSec=600
+
+RuntimeDirectory=paladin
+RuntimeDirectoryMode=0700
+
+ConfigurationDirectory=paladin
+ConfigurationDirectoryMode=0700
+
+StateDirectory=paladin
+StateDirectoryMode=0700
+
+WorkingDirectory=/var/lib/paladin
+
+# Hardening measures
+# https://www.linuxjournal.com/content/systemd-service-strengthening
+# sudo systemd-analyze security
+# systemd-analyze syscall-filter
+####################
+
+# Provide a private /tmp and /var/tmp.
+PrivateTmp=true
+
+# Mount /usr, /boot/ and /etc read-only for the process.
+ProtectSystem=full
+
+# Deny access to /home, /root and /run/user
+ProtectHome=true
+
+# Disallow the process and all of its children to gain
+# new privileges through execve().
+NoNewPrivileges=true
+
+# Use a new /dev namespace only populated with API pseudo devices
+# such as /dev/null, /dev/zero and /dev/random.
+PrivateDevices=true
+
+# Deny the creation of writable and executable memory mappings.
+MemoryDenyWriteExecute=true
+# MemoryDenyWriteExecute=false
+
+# Deny any ability to create namespaces. Should not be needed
+RestrictNamespaces=true
+
+# Restrict any kind of special capabilities
+CapabilityBoundingSet=
+
+# Allow minimal system calls for IO (filesystem network) and basic systemctl operations
+SystemCallFilter=@signal @network-io @ipc @file-system @chown @system-service
+
+# Access to  /sys/fs/cgroup/ should not be needed
+ProtectControlGroups=true
+
+# We don't need access to special file systems or extra kernel modules to work
+ProtectKernelModules=true
+
+# Access to proc/sys/, /sys/, /proc/sysrq-trigger, /proc/latency_stats, /proc/acpi, /proc/timer_stats, /proc/fs and /proc/irq is not needed
+ProtectKernelTunables=true
+
+# From the docsk "As the SUID/SGID bits are mechanisms to elevate privileges, and allow users to acquire the identity of other users, it is recommended to restrict creation of SUID/SGID files to the few programs that actually require them"
+RestrictSUIDSGID=true
+
+[Install]
+WantedBy=multi-user.target

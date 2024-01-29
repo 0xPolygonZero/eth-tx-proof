@@ -59,6 +59,7 @@ pub fn to_disk(circuits: &AllRecursiveCircuits, circuit_config: &CircuitConfig) 
     let file = OpenOptions::new()
         .write(true)
         .create(true)
+        .truncate(false)
         .open(disk_path(circuit_config));
 
     let mut file = match file {
