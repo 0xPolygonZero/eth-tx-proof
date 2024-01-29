@@ -117,6 +117,30 @@ pub async fn get_block_metadata(
     ))
 }
 
+pub async fn get_block_hashes(block_number: U64, provider: &Provider<Http>) -> Result<BlockHashes> {
+    let mut prev_hashes = vec![H256::zero(); 256];
+    let cur_hash = provider
+        .get_block(block_number)
+        .await?
+        .ok_or_else(|| anyhow!("Block not found. Block number: {}", block_number))?
+        .hash
+        .unwrap();
+    for i in 1..=256 {
+        let hash = provider
+            .get_block(block_number - i)
+            .await?
+            .ok_or_else(|| anyhow!("Block not found. Block number: {}", block_number))?
+            .hash
+            .unwrap();
+        prev_hashes[256 - i] = hash;
+    }
+
+    Ok(BlockHashes {
+        prev_hashes,
+        cur_hash,
+    })
+}
+
 pub async fn gather_witness(tx: TxHash, provider: &Provider<Http>) -> Result<Vec<TxnProofGenIR>> {
     let tx = provider
         .get_transaction(tx)
@@ -391,10 +415,7 @@ pub async fn gather_witness(tx: TxHash, provider: &Provider<Http>) -> Result<Vec
             withdrawals,
             contract_code: contract_codes.clone(),
             block_metadata: block_metadata.clone(),
-            block_hashes: BlockHashes {
-                prev_hashes: vec![H256::zero(); 256], // TODO
-                cur_hash: H256::zero(),               // TODO
-            },
+            block_hashes: get_block_hashes(block_number.into(), provider).await?,
             gas_used_before: gas_used,
             gas_used_after: gas_used + receipt.gas_used.unwrap(),
             checkpoint_state_trie_root: prev_block.state_root, // TODO: make it configurable
