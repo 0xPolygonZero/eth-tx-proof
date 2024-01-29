@@ -41,7 +41,7 @@ command. The input argument is a transaction hash and in particular it
 is the *last* transaction has in the block.
 
 Once you've successfully generated a witness, you're ready to start
-proving either with the `in-memory` run time or the `amqp` runtime.
+proving either with the `in-memory` runtime or the `amqp` runtime.
 
 ### In Memory Proving
 
