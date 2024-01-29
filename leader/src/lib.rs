@@ -129,7 +129,7 @@ pub async fn get_block_hashes(block_number: U64, provider: &Provider<Http>) -> R
         let hash = provider
             .get_block(block_number - i)
             .await?
-            .ok_or_else(|| anyhow!("Block not found. Block number: {}", block_number))?
+            .ok_or_else(|| anyhow!("Block not found. Block number: {}", block_number - i))?
             .hash
             .unwrap();
         prev_hashes[256 - i] = hash;
