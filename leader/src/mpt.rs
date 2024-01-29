@@ -21,6 +21,11 @@ pub struct Mpt {
     pub root: H256,
 }
 
+const EMPTY_TRIE_HASH: H256 = H256([
+    86, 232, 31, 23, 27, 204, 85, 166, 255, 131, 69, 230, 146, 192, 248, 110, 91, 72, 224, 27, 153,
+    108, 173, 192, 1, 98, 47, 181, 227, 99, 180, 33,
+]);
+
 impl Mpt {
     pub fn new() -> Self {
         Self {
@@ -30,8 +35,14 @@ impl Mpt {
     }
 
     pub fn to_partial_trie(&self) -> HashedPartialTrie {
-        self.to_partial_trie_helper(self.root)
+        let trie = self.to_partial_trie_helper(self.root);
+        if trie == Node::Hash(EMPTY_TRIE_HASH).into() {
+            Node::Empty.into()
+        } else {
+            trie
+        }
     }
+
     fn to_partial_trie_helper(&self, root: H256) -> HashedPartialTrie {
         let node = self.mpt.get(&root);
         let data = if let Some(mpt_node) = node {
