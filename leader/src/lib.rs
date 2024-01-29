@@ -330,6 +330,8 @@ pub async fn gather_witness(tx: TxHash, provider: &Provider<Http>) -> Result<Vec
     } else {
         vec![]
     };
+    // Block hashes
+    let block_hashes = get_block_hashes(block_number.into(), provider).await?;
 
     let mut storage_mpts: HashMap<_, _> = storage_mpts
         .iter()
@@ -415,7 +417,7 @@ pub async fn gather_witness(tx: TxHash, provider: &Provider<Http>) -> Result<Vec
             withdrawals,
             contract_code: contract_codes.clone(),
             block_metadata: block_metadata.clone(),
-            block_hashes: get_block_hashes(block_number.into(), provider).await?,
+            block_hashes: block_hashes.clone(),
             gas_used_before: gas_used,
             gas_used_after: gas_used + receipt.gas_used.unwrap(),
             checkpoint_state_trie_root: prev_block.state_root, // TODO: make it configurable
