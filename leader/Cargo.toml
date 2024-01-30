@@ -21,6 +21,7 @@ tracing = { workspace = true }
 tracing-subscriber = { workspace = true }
 ethers = { workspace = true }
 
+threadpool = "1.8.1"
 rayon = "1.8.1"
 itertools = "0.11.0"
 eth_trie_utils = { git = "https://github.com/0xPolygonZero/eth_trie_utils.git", rev = "7fc3c3f54b3cec9c6fc5ffc5230910bd1cb77f76" }

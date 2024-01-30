@@ -1,5 +1,4 @@
-use std::sync::Condvar;
-use std::sync::{Arc, Mutex};
+use std::sync::mpsc::channel;
 
 use anyhow::{bail, Result};
 use ops::{AggProof, AggregatableProofWithIdentity, BlockProof, TxProof};
@@ -15,6 +14,7 @@ use plonky_block_proof_gen::{
 use protocol_decoder::types::TxnProofGenIR;
 use rayon::prelude::*;
 use serde::{Deserialize, Serialize};
+use threadpool::ThreadPool;
 
 #[derive(Debug, Deserialize, Serialize)]
 pub struct ProverInput {
@@ -47,27 +47,24 @@ impl ProverInput {
         }
     }
 
-    pub fn prove_in_memory(self, paralellism: usize) -> Result<GeneratedBlockProof> {
+    pub fn prove_in_memory(self, parallelism: usize) -> Result<GeneratedBlockProof> {
         tracing::info!("Proving block");
-        let counter = Arc::new((Mutex::new(0), Condvar::new()));
 
-        let txs = self.proof_gen_ir.into_par_iter().map(|tx| {
-            let (lock, cvar) = &*counter;
-            let mut count = lock.lock().unwrap();
-            while *count >= paralellism {
-                count = cvar.wait(count).unwrap();
-            }
-            *count += 1;
-            drop(count);
+        let (tx, rx) = channel();
+        let pool = ThreadPool::new(parallelism);
+        let job_size = self.proof_gen_ir.len();
+        for (idx, tx_ir) in self.proof_gen_ir.into_iter().enumerate() {
+            let tx = tx.clone();
+            pool.execute(move || {
+                let agg_proof = TxProof.execute(tx_ir).unwrap();
+                tx.send((idx, agg_proof)).unwrap();
+            });
+        }
 
-            let proof = TxProof.execute(tx).unwrap();
-            let mut count = lock.lock().unwrap();
-            *count -= 1;
-            cvar.notify_all();
-            proof
-        });
+        let mut tx_proofs: Vec<_> = rx.iter().take(job_size).collect();
+        tx_proofs.sort_by_key(|(idx, _)| *idx);
 
-        let agg_proof = txs.reduce(
+        let agg_proof = tx_proofs.into_par_iter().map(|(_, p)| p).reduce(
             || AggregatableProofWithIdentity::Unit,
             |a, b| AggProof.combine(a, b).unwrap(),
         );
