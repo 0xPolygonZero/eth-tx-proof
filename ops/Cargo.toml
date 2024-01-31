@@ -13,6 +13,7 @@ tracing = { workspace = true }
 ethers = { workspace = true }
 
 rlp = "0.5.2"
+sysinfo = "0.30.5"
 
 # Local dependencies
 common = { path = "../common" }

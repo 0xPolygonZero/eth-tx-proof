@@ -20,11 +20,14 @@ impl ProverInput {
     pub async fn prove(
         self,
         runtime: &Runtime,
+        memory_threshold_mb: Option<u64>,
         _previous: Option<PlonkyProofIntern>,
     ) -> Result<GeneratedBlockProof> {
         tracing::info!("Proving block");
         let agg_proof = IndexedStream::from(self.proof_gen_ir)
-            .map(&TxProof)
+            .map(&TxProof {
+                memory_threshold_mb,
+            })
             .fold(&AggProof)
             .run(runtime)
             .await?;

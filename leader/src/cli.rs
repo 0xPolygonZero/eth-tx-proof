@@ -8,6 +8,9 @@ use ethers::types::TxHash;
 pub struct Cli {
     #[command(subcommand)]
     pub command: Command,
+    /// Worker memory threshold for transaction proofs, in MB.
+    #[arg(long, short, env = "MEMORY_THRESHOLD_MB")]
+    pub memory_threshold_mb: Option<u64>,
 }
 
 #[derive(Subcommand)]

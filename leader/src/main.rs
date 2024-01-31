@@ -54,7 +54,9 @@ async fn main() -> Result<()> {
             let proof_gen_ir: Vec<TxnProofGenIR> = serde_json::from_str(&buffer)?;
             let prover_input = prover::ProverInput { proof_gen_ir };
             let runtime = Runtime::from_config(&paladin, register()).await?;
-            let proof = prover_input.prove(&runtime, None).await?;
+            let proof = prover_input
+                .prove(&runtime, args.memory_threshold_mb, None)
+                .await?;
             std::io::stdout().write_all(&serde_json::to_vec(&proof)?)?;
             runtime.close().await?;
         }

@@ -11,6 +11,7 @@ use plonky_block_proof_gen::{
 };
 use protocol_decoder::types::TxnProofGenIR;
 use serde::{Deserialize, Serialize};
+use sysinfo::{MemoryRefreshKind, System};
 use tracing::{info_span, Level};
 
 fn p_state() -> &'static ProverState {
@@ -20,7 +21,9 @@ fn p_state() -> &'static ProverState {
 registry!();
 
 #[derive(Deserialize, Serialize, RemoteExecute)]
-pub struct TxProof;
+pub struct TxProof {
+    pub memory_threshold_mb: Option<u64>,
+}
 
 impl Operation for TxProof {
     type Input = TxnProofGenIR;
@@ -39,6 +42,37 @@ impl Operation for TxProof {
 
         let _span = info_span!("generate proof", tx_hash = ?tx_hash).entered();
         tracing::event!(Level::INFO, "generating proof for {:?}", tx_hash);
+
+        if let Some(memory_threshold_mb) = self.memory_threshold_mb {
+            tracing::event!(
+                Level::INFO,
+                "memory threshold set to {} MB",
+                memory_threshold_mb
+            );
+            let mut system = System::new();
+
+            loop {
+                system.refresh_memory_specifics(MemoryRefreshKind::new().with_ram());
+                let available_ram_mb = system.available_memory() / (1024 * 1024);
+                if available_ram_mb < memory_threshold_mb {
+                    tracing::event!(
+                        Level::INFO,
+                        "available RAM ({}MB) is less than memory threshold ({}MB). sleeping for 1s",
+                        available_ram_mb,
+                        memory_threshold_mb
+                    );
+                    std::thread::sleep(std::time::Duration::from_secs(1));
+                } else {
+                    tracing::event!(
+                        Level::INFO,
+                        "available RAM ({}MB) is greater than memory threshold ({}MB). starting proof generation",
+                        available_ram_mb,
+                        memory_threshold_mb
+                    );
+                    break;
+                }
+            }
+        }
 
         let start = std::time::Instant::now();
         let result = generate_txn_proof(p_state(), input, None).map_err(FatalError::from)?;
