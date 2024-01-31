@@ -53,8 +53,8 @@ impl Operation for TxProof {
 
             loop {
                 system.refresh_memory_specifics(MemoryRefreshKind::new().with_ram());
-                let available_ram_mb = system.available_memory() / (1024 * 1024);
-                if available_ram_mb < memory_threshold_mb {
+                let available_ram_mb = system.available_memory() as f64 / (1024.0 * 1024.0);
+                if available_ram_mb < memory_threshold_mb as f64 {
                     tracing::event!(
                         Level::INFO,
                         "available RAM ({}MB) is less than memory threshold ({}MB). sleeping for 1s",
