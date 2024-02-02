@@ -16,8 +16,8 @@ plonky2 = { git = "https://github.com/0xPolygonZero/plonky2", rev = "39a2d62d6d0
 ] }
 plonky2_evm = { git = "https://github.com/0xPolygonZero/plonky2", rev = "39a2d62d6d025631380da88aa78c2f8b929852a2", default-features = false }
 clap = { version = "4.4.11", features = ["derive", "env"] }
-protocol_decoder = { git = "https://github.com/0xPolygonZero/proof-protocol-decoder.git", rev = "6f97b3cd837d385c3501107bfdfbb3761e392b73" }
-plonky_block_proof_gen = { git = "https://github.com/0xPolygonZero/proof-protocol-decoder.git", rev = "6f97b3cd837d385c3501107bfdfbb3761e392b73" }
+protocol_decoder = { git = "https://github.com/0xPolygonZero/proof-protocol-decoder.git", rev = "832284ea061da53e355a48c3a680f6c088f55f0b" }
+plonky_block_proof_gen = { git = "https://github.com/0xPolygonZero/proof-protocol-decoder.git", rev = "832284ea061da53e355a48c3a680f6c088f55f0b" }
 dotenvy = "0.15.7"
 paladin-core = "0.4.1"
 serde = { version = "1.0.193", features = ["derive"] }

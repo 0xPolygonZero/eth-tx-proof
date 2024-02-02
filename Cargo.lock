@@ -2082,7 +2082,6 @@ checksum = "290f1a1d9242c78d09ce40a5e87e7554ee637af1351968159f4952f028f75604"
 dependencies = [
  "ahash",
  "allocator-api2",
- "rayon",
  "serde",
 ]
 
@@ -3366,9 +3365,6 @@ dependencies = [
 name = "plonky2_maybe_rayon"
 version = "0.1.1"
 source = "git+https://github.com/0xPolygonZero/plonky2?rev=39a2d62d6d025631380da88aa78c2f8b929852a2#39a2d62d6d025631380da88aa78c2f8b929852a2"
-dependencies = [
- "rayon",
-]
 
 [[package]]
 name = "plonky2_util"
@@ -3378,7 +3374,7 @@ source = "git+https://github.com/0xPolygonZero/plonky2?rev=39a2d62d6d025631380da
 [[package]]
 name = "plonky_block_proof_gen"
 version = "0.1.0"
-source = "git+https://github.com/0xPolygonZero/proof-protocol-decoder.git?rev=6f97b3cd837d385c3501107bfdfbb3761e392b73#6f97b3cd837d385c3501107bfdfbb3761e392b73"
+source = "git+https://github.com/0xPolygonZero/proof-protocol-decoder.git?rev=832284ea061da53e355a48c3a680f6c088f55f0b#832284ea061da53e355a48c3a680f6c088f55f0b"
 dependencies = [
  "ethereum-types",
  "log",
@@ -3554,7 +3550,7 @@ dependencies = [
 [[package]]
 name = "protocol_decoder"
 version = "0.1.0"
-source = "git+https://github.com/0xPolygonZero/proof-protocol-decoder.git?rev=6f97b3cd837d385c3501107bfdfbb3761e392b73#6f97b3cd837d385c3501107bfdfbb3761e392b73"
+source = "git+https://github.com/0xPolygonZero/proof-protocol-decoder.git?rev=832284ea061da53e355a48c3a680f6c088f55f0b#832284ea061da53e355a48c3a680f6c088f55f0b"
 dependencies = [
  "bytes",
  "ciborium",
