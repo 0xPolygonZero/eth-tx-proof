@@ -19,8 +19,9 @@ jobs:
     timeout-minutes: 10
     steps:
       - uses: actions/checkout@v4
-      - uses: dtolnay/rust-toolchain@nightly
+      - uses: dtolnay/rust-toolchain@master
         with:
+            toolchain: nightly-2024-02-01
             components: clippy
       - uses: Swatinem/rust-cache@v2
         with:
@@ -34,8 +35,9 @@ jobs:
     timeout-minutes: 10
     steps:
         - uses: actions/checkout@v4
-        - uses: dtolnay/rust-toolchain@nightly
+        - uses: dtolnay/rust-toolchain@master
           with:
+            toolchain: nightly-2024-02-01
             components: rustfmt
         - run: cargo fmt --all --check
 
@@ -44,7 +46,9 @@ jobs:
     timeout-minutes: 20
     steps:
       - uses: actions/checkout@v4
-      - uses: dtolnay/rust-toolchain@stable
+      - uses: dtolnay/rust-toolchain@master
+        with:
+            toolchain: nightly-2024-02-01
       - uses: Swatinem/rust-cache@v2
         with:
             cache-on-failure: true
