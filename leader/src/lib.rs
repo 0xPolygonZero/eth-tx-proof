@@ -125,6 +125,9 @@ pub async fn get_block_hashes(block_number: U64, provider: &Provider<Http>) -> R
         .hash
         .unwrap();
     for i in 1..=256 {
+        if block_number < i.into() {
+            break;
+        }
         let hash = provider
             .get_block(block_number - i)
             .await?
