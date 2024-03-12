@@ -10,7 +10,6 @@ use anyhow::{anyhow, Result};
 use eth_trie_utils::nibbles::Nibbles;
 use eth_trie_utils::partial_trie::{HashedPartialTrie, Node, PartialTrie};
 use ethers::prelude::*;
-use ethers::types::GethDebugTracerType;
 use ethers::utils::rlp;
 use itertools::izip;
 use plonky2_evm::generation::{GenerationInputs, TrieInputs};
@@ -433,10 +432,7 @@ pub async fn gather_witness(tx: TxHash, provider: &Provider<Http>) -> Result<Vec
         txns_mpt = new_txns_mpt;
         receipts_mpt = new_receipts_mpt;
 
-        proof_gen_ir.push(TxnProofGenIR {
-            gen_inputs: inputs,
-            txn_idx: i,
-        });
+        proof_gen_ir.push(inputs);
     }
 
     Ok(proof_gen_ir)

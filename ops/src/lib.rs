@@ -27,15 +27,10 @@ impl Operation for TxProof {
     type Output = AggregatableProof;
 
     fn execute(&self, input: Self::Input) -> Result<Self::Output> {
-        let tx_hash = rlp::decode::<Transaction>(
-            input
-                .gen_inputs
-                .signed_txn
-                .as_ref()
-                .expect("signed txn is missing"),
-        )
-        .expect("failed to decode signed transaction")
-        .hash;
+        let tx_hash =
+            rlp::decode::<Transaction>(input.signed_txn.as_ref().expect("signed txn is missing"))
+                .expect("failed to decode signed transaction")
+                .hash;
 
         let _span = info_span!("generate proof", tx_hash = ?tx_hash).entered();
         tracing::event!(Level::INFO, "generating proof for {:?}", tx_hash);

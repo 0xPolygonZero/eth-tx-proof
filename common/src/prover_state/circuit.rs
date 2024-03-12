@@ -5,7 +5,7 @@ use std::{
     str::FromStr,
 };
 
-use plonky2_evm::{all_stark::AllStark, config::StarkConfig};
+use plonky2_evm::{AllStark, StarkConfig};
 use plonky_block_proof_gen::types::AllRecursiveCircuits;
 
 use crate::parsing::{parse_range, RangeParseError};
