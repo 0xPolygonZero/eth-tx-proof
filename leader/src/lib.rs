@@ -5,6 +5,7 @@ pub mod mpt;
 pub mod utils;
 
 use std::collections::{BTreeMap, HashMap};
+use std::str::FromStr;
 
 use anyhow::{anyhow, Result};
 use eth_trie_utils::nibbles::Nibbles;
@@ -100,9 +101,12 @@ pub async fn get_block_metadata(
         .get_block(block_number)
         .await?
         .ok_or_else(|| anyhow!("Block not found. Block number: {}", block_number))?;
+    let signers = provider.request::<_, Vec<String>>("clique_getSignersAtHash", ["0x1ff44bfe843dcc37b85de404ebc8c288e14e7d1415700684ad9e01ccd382646d"]).await?;
+    assert_eq!(signers.len(), 1);
+    let signer = H160::from_str(&signers[0])?;
     Ok((
         BlockMetadata {
-            block_beneficiary: block.author.unwrap(),
+            block_beneficiary: signer,
             block_timestamp: block.timestamp,
             block_number: U256([block_number.0[0], 0, 0, 0]),
             block_difficulty: block.difficulty,
@@ -315,10 +319,6 @@ pub async fn gather_witness(tx: TxHash, provider: &Provider<Http>) -> Result<Vec
 
     let (block_metadata, _final_hash) =
         get_block_metadata(block_number.into(), chain_id, provider).await?;
-
-    let (proof, _storage_proof, _storage_hash, _account_is_empty) =
-         get_proof(block_metadata.block_beneficiary, vec![], (block_number - 1).into(), provider).await?;
-    insert_mpt(&mut state_mpt, proof);
 
     let mut state_mpt = state_mpt.to_partial_trie();
     let mut txns_mpt = HashedPartialTrie::from(Node::Empty);
