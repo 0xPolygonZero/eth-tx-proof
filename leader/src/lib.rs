@@ -101,7 +101,9 @@ pub async fn get_block_metadata(
         .get_block(block_number)
         .await?
         .ok_or_else(|| anyhow!("Block not found. Block number: {}", block_number))?;
-    let signers = provider.request::<_, Vec<String>>("clique_getSignersAtHash", [block.hash]).await?;
+    let signers = provider
+        .request::<_, Vec<String>>("clique_getSignersAtHash", [block.hash])
+        .await?;
     assert_eq!(signers.len(), 1);
     let signer = H160::from_str(&signers[0])?;
     Ok((
