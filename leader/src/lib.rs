@@ -5,6 +5,7 @@ pub mod mpt;
 pub mod utils;
 
 use std::collections::{BTreeMap, HashMap};
+use std::str::FromStr;
 
 use anyhow::{anyhow, Result};
 use eth_trie_utils::nibbles::Nibbles;
@@ -100,9 +101,14 @@ pub async fn get_block_metadata(
         .get_block(block_number)
         .await?
         .ok_or_else(|| anyhow!("Block not found. Block number: {}", block_number))?;
+    let signers = provider
+        .request::<_, Vec<String>>("clique_getSignersAtHash", [block.hash])
+        .await?;
+    assert_eq!(signers.len(), 1);
+    let signer = H160::from_str(&signers[0])?;
     Ok((
         BlockMetadata {
-            block_beneficiary: block.author.unwrap(),
+            block_beneficiary: signer,
             block_timestamp: block.timestamp,
             block_number: U256([block_number.0[0], 0, 0, 0]),
             block_difficulty: block.difficulty,
@@ -156,7 +162,7 @@ pub async fn gather_witness(tx: TxHash, provider: &Provider<Http>) -> Result<Vec
     let mut contract_codes = contract_codes();
     let mut storage_mpts = HashMap::new();
     let mut txn_rlps = vec![];
-    let chain_id = U256::one();
+    let chain_id = provider.get_chainid().await?;
     let mut alladdrs = vec![];
     let mut state = BTreeMap::<Address, AccountState>::new();
     let mut traces: Vec<BTreeMap<Address, AccountState>> = vec![];
