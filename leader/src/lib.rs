@@ -156,7 +156,7 @@ pub async fn gather_witness(tx: TxHash, provider: &Provider<Http>) -> Result<Vec
     let mut contract_codes = contract_codes();
     let mut storage_mpts = HashMap::new();
     let mut txn_rlps = vec![];
-    let chain_id = U256::one();
+    let chain_id = provider.get_chainid().await?;
     let mut alladdrs = vec![];
     let mut state = BTreeMap::<Address, AccountState>::new();
     let mut traces: Vec<BTreeMap<Address, AccountState>> = vec![];
