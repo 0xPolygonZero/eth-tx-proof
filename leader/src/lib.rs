@@ -316,6 +316,10 @@ pub async fn gather_witness(tx: TxHash, provider: &Provider<Http>) -> Result<Vec
     let (block_metadata, _final_hash) =
         get_block_metadata(block_number.into(), chain_id, provider).await?;
 
+    let (proof, _storage_proof, _storage_hash, _account_is_empty) =
+         get_proof(block_metadata.block_beneficiary, vec![], (block_number - 1).into(), provider).await?;
+    insert_mpt(&mut state_mpt, proof);
+
     let mut state_mpt = state_mpt.to_partial_trie();
     let mut txns_mpt = HashedPartialTrie::from(Node::Empty);
     let mut receipts_mpt = HashedPartialTrie::from(Node::Empty);
