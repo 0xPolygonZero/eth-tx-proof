@@ -7,16 +7,16 @@ pub mod utils;
 use std::collections::{BTreeMap, HashMap};
 
 use anyhow::{anyhow, Result};
-use eth_trie_utils::nibbles::Nibbles;
-use eth_trie_utils::partial_trie::{HashedPartialTrie, Node, PartialTrie};
 use ethers::prelude::*;
 use ethers::types::GethDebugTracerType;
 use ethers::utils::rlp;
+use evm_arithmetization::generation::{GenerationInputs, TrieInputs};
+use evm_arithmetization::proof::BlockMetadata;
+use evm_arithmetization::proof::{BlockHashes, TrieRoots};
 use itertools::izip;
-use plonky2_evm::generation::{GenerationInputs, TrieInputs};
-use plonky2_evm::proof::BlockMetadata;
-use plonky2_evm::proof::{BlockHashes, TrieRoots};
-use protocol_decoder::types::TxnProofGenIR;
+use mpt_trie::nibbles::Nibbles;
+use mpt_trie::partial_trie::{HashedPartialTrie, Node, PartialTrie};
+use trace_decoder::types::TxnProofGenIR;
 
 use crate::mpt::{apply_diffs, insert_mpt, trim, Mpt};
 use crate::utils::{has_storage_deletion, keccak};
@@ -433,10 +433,7 @@ pub async fn gather_witness(tx: TxHash, provider: &Provider<Http>) -> Result<Vec
         txns_mpt = new_txns_mpt;
         receipts_mpt = new_receipts_mpt;
 
-        proof_gen_ir.push(TxnProofGenIR {
-            gen_inputs: inputs,
-            txn_idx: i,
-        });
+        proof_gen_ir.push(inputs);
     }
 
     Ok(proof_gen_ir)

@@ -6,8 +6,8 @@ edition = "2021"
 
 [dependencies]
 tracing = { workspace = true }
-plonky_block_proof_gen = { workspace = true }
+proof_gen = { workspace = true }
 plonky2 = { workspace = true }
-plonky2_evm = { workspace = true }
+evm_arithmetization = { workspace = true }
 clap = { workspace = true }
 thiserror = "1.0.50"

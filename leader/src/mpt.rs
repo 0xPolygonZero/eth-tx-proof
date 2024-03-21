@@ -1,13 +1,13 @@
 use std::collections::{BTreeMap, HashMap};
 use std::sync::Arc;
 
-use eth_trie_utils::nibbles::Nibbles;
-use eth_trie_utils::partial_trie::PartialTrie;
-use eth_trie_utils::partial_trie::{HashedPartialTrie, Node};
-use eth_trie_utils::trie_subsets::create_trie_subset;
 use ethers::prelude::*;
 use ethers::utils::rlp;
-use plonky2_evm::generation::mpt::AccountRlp;
+use evm_arithmetization::generation::mpt::AccountRlp;
+use mpt_trie::nibbles::Nibbles;
+use mpt_trie::partial_trie::PartialTrie;
+use mpt_trie::partial_trie::{HashedPartialTrie, Node};
+use mpt_trie::trie_subsets::create_trie_subset;
 
 use crate::utils::keccak;
 use crate::EMPTY_HASH;

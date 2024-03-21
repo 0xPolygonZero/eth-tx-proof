@@ -13,7 +13,7 @@ mod prover;
 use cli::Command;
 use ops::register;
 use paladin::runtime::Runtime;
-use protocol_decoder::types::TxnProofGenIR;
+use trace_decoder::types::TxnProofGenIR;
 mod init;
 
 #[tokio::main]
