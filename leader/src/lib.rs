@@ -4,6 +4,8 @@ pub mod cli;
 pub mod mpt;
 pub mod utils;
 
+mod padding_and_withdrawals;
+
 use std::collections::{BTreeMap, HashMap};
 
 use anyhow::{anyhow, Result};
@@ -11,12 +13,15 @@ use ethers::prelude::*;
 use ethers::types::GethDebugTracerType;
 use ethers::utils::rlp;
 use evm_arithmetization::generation::{GenerationInputs, TrieInputs};
-use evm_arithmetization::proof::BlockMetadata;
 use evm_arithmetization::proof::{BlockHashes, TrieRoots};
+use evm_arithmetization::proof::{BlockMetadata, ExtraBlockData};
 use itertools::izip;
 use mpt_trie::nibbles::Nibbles;
 use mpt_trie::partial_trie::{HashedPartialTrie, Node, PartialTrie};
-use trace_decoder::types::TxnProofGenIR;
+use padding_and_withdrawals::{
+    add_withdrawals_to_txns, pad_gen_inputs_with_dummy_inputs_if_needed, BlockMetaAndHashes,
+};
+use trace_decoder::types::{HashedAccountAddr, TxnProofGenIR};
 
 use crate::mpt::{apply_diffs, insert_mpt, trim, Mpt};
 use crate::utils::{has_storage_deletion, keccak};
@@ -26,6 +31,16 @@ pub const EMPTY_HASH: H256 = H256([
     197, 210, 70, 1, 134, 247, 35, 60, 146, 126, 125, 178, 220, 199, 3, 192, 229, 0, 182, 83, 202,
     130, 39, 59, 123, 250, 216, 4, 93, 133, 164, 112,
 ]);
+
+/// The current state of all tries as we process txn deltas. These are mutated
+/// after every txn we process in the trace.
+#[derive(Clone, Debug, Default)]
+struct PartialTrieState {
+    state: HashedPartialTrie,
+    storage: HashMap<HashedAccountAddr, HashedPartialTrie>,
+    txn: HashedPartialTrie,
+    receipt: HashedPartialTrie,
+}
 
 /// Get the proof for an account + storage locations at a given block number.
 pub async fn get_proof(
@@ -154,13 +169,26 @@ pub async fn gather_witness(tx: TxHash, provider: &Provider<Http>) -> Result<Vec
         .ok_or_else(|| anyhow!("Block not found. Block number: {}", block_number))?;
     let mut state_mpt = Mpt::new();
     let mut contract_codes = contract_codes();
-    let mut storage_mpts = HashMap::new();
+    let mut storage_mpts: HashMap<_, Mpt> = HashMap::new();
     let mut txn_rlps = vec![];
     let chain_id = U256::one();
     let mut alladdrs = vec![];
     let mut state = BTreeMap::<Address, AccountState>::new();
     let mut traces: Vec<BTreeMap<Address, AccountState>> = vec![];
     let mut txns_info = vec![];
+
+    let initial_storage_tries = HashMap::from_iter(
+        storage_mpts
+            .iter()
+            .map(|(k, trie)| (*k, trie.to_partial_trie())),
+    );
+
+    let initial_tries_for_dummies = PartialTrieState {
+        state: state_mpt.to_partial_trie(),
+        storage: initial_storage_tries,
+        ..Default::default()
+    };
+
     for &hash in block.transactions.iter().take(tx_index + 1) {
         let txn = provider.get_transaction(hash);
         let txn = txn
@@ -435,6 +463,58 @@ pub async fn gather_witness(tx: TxHash, provider: &Provider<Http>) -> Result<Vec
 
         proof_gen_ir.push(inputs);
     }
+
+    let b_data = BlockMetaAndHashes {
+        b_meta: block_metadata,
+        b_hashes: block_hashes,
+    };
+
+    // let other_data = OtherBlockData {
+    //     b_data,
+    //     checkpoint_state_trie_root: prev_block.state_root,
+    // };
+
+    let initial_extra_data = ExtraBlockData {
+        checkpoint_state_trie_root: prev_block.state_root,
+        ..Default::default()
+    };
+
+    let mut final_tries = PartialTrieState {
+        state: state_mpt,
+        storage: storage_mpts,
+        txn: txns_mpt,
+        receipt: receipts_mpt,
+    };
+
+    let final_extra_data = proof_gen_ir
+        .last()
+        .map(|ir| ExtraBlockData {
+            checkpoint_state_trie_root: prev_block.state_root,
+            txn_number_before: ir.txn_number_before,
+            txn_number_after: ir.txn_number_before + U256::one(),
+            gas_used_before: ir.gas_used_before,
+            gas_used_after: ir.gas_used_after,
+        })
+        .unwrap_or_else(|| initial_extra_data.clone());
+
+    let dummies_added = pad_gen_inputs_with_dummy_inputs_if_needed(
+        &mut proof_gen_ir,
+        &b_data,
+        &initial_extra_data,
+        &final_extra_data,
+        &initial_tries_for_dummies,
+        &final_tries,
+        !wds.is_empty(),
+    );
+
+    add_withdrawals_to_txns(
+        &mut proof_gen_ir,
+        &b_data,
+        &final_extra_data,
+        &mut final_tries,
+        wds,
+        dummies_added,
+    );
 
     Ok(proof_gen_ir)
 }

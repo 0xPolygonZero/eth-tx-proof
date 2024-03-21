@@ -3,9 +3,9 @@ pub(crate) fn tracing() {
     tracing_subscriber::Registry::default()
         .with(
             tracing_subscriber::fmt::layer()
-                .pretty()
-                .with_span_events(FmtSpan::CLOSE)
-                .with_filter(EnvFilter::from_default_env()),
+                .without_time()
+                .with_ansi(false)
+                .with_filter(EnvFilter::from_default_env())
         )
         .init();
 }
