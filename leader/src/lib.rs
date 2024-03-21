@@ -469,11 +469,6 @@ pub async fn gather_witness(tx: TxHash, provider: &Provider<Http>) -> Result<Vec
         b_hashes: block_hashes,
     };
 
-    // let other_data = OtherBlockData {
-    //     b_data,
-    //     checkpoint_state_trie_root: prev_block.state_root,
-    // };
-
     let initial_extra_data = ExtraBlockData {
         checkpoint_state_trie_root: prev_block.state_root,
         ..Default::default()
@@ -491,8 +486,8 @@ pub async fn gather_witness(tx: TxHash, provider: &Provider<Http>) -> Result<Vec
         .map(|ir| ExtraBlockData {
             checkpoint_state_trie_root: prev_block.state_root,
             txn_number_before: ir.txn_number_before,
-            txn_number_after: ir.txn_number_before + U256::one(),
-            gas_used_before: ir.gas_used_before,
+            txn_number_after: ir.txn_number_before,
+            gas_used_before: ir.gas_used_after,
             gas_used_after: ir.gas_used_after,
         })
         .unwrap_or_else(|| initial_extra_data.clone());
