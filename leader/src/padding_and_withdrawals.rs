@@ -187,11 +187,11 @@ fn create_dummy_txn_pair_for_empty_block(
 fn create_dummy_gen_input(
     other_data: &BlockMetaAndHashes,
     extra_data: &ExtraBlockData,
-    final_tries: &PartialTrieState,
+    tries: &PartialTrieState,
 ) -> GenerationInputs {
     let sub_tries = create_dummy_proof_trie_inputs(
-        final_tries,
-        create_fully_hashed_out_sub_partial_trie(&final_tries.state),
+        tries,
+        create_fully_hashed_out_sub_partial_trie(&tries.state),
     );
     create_dummy_gen_input_common(other_data, extra_data, sub_tries)
 }
@@ -199,16 +199,16 @@ fn create_dummy_gen_input(
 fn create_dummy_gen_input_with_state_addrs_accessed(
     other_data: &BlockMetaAndHashes,
     extra_data: &ExtraBlockData,
-    final_tries: &PartialTrieState,
+    tries: &PartialTrieState,
     withdrawal_account_addrs_accessed: impl Iterator<Item = HashedAccountAddr>,
 ) -> GenerationInputs {
     let state_trie_hashed_for_withdrawals = create_minimal_state_partial_trie(
-        &final_tries.state,
+        &tries.state,
         withdrawal_account_addrs_accessed,
         iter::empty(),
     );
 
-    let sub_tries = create_dummy_proof_trie_inputs(final_tries, state_trie_hashed_for_withdrawals);
+    let sub_tries = create_dummy_proof_trie_inputs(tries, state_trie_hashed_for_withdrawals);
 
     create_dummy_gen_input_common(other_data, extra_data, sub_tries)
 }

@@ -15,14 +15,21 @@ trace_decoder = { workspace = true }
 proof_gen = { workspace = true }
 anyhow = { workspace = true }
 serde = { workspace = true }
+serde_path_to_error = "0.1.14"
 paladin-core = { workspace = true }
 dotenvy = { workspace = true }
 tracing = { workspace = true }
 tracing-subscriber = { workspace = true }
 ethers = { workspace = true }
+futures = "0.3.30"
+reqwest = { version = "0.12.2", default-features = false, features = [
+  "json",
+  "rustls-tls",
+] }
+
 
 itertools = "0.11.0"
-mpt_trie = "0.2.0"
+mpt_trie = { git = "https://github.com/0xPolygonZero/zk_evm.git", branch = "develop" }
 hex = "0.4.3"
 serde_json = "1.0.108"
 

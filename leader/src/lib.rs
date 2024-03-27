@@ -2,6 +2,7 @@
 
 pub mod cli;
 pub mod mpt;
+mod rpc;
 pub mod utils;
 
 mod padding_and_withdrawals;
@@ -13,7 +14,7 @@ use ethers::prelude::*;
 use ethers::types::GethDebugTracerType;
 use ethers::utils::rlp;
 use evm_arithmetization::generation::{GenerationInputs, TrieInputs};
-use evm_arithmetization::proof::{BlockHashes, TrieRoots};
+use evm_arithmetization::proof::TrieRoots;
 use evm_arithmetization::proof::{BlockMetadata, ExtraBlockData};
 use itertools::izip;
 use mpt_trie::nibbles::Nibbles;
@@ -23,8 +24,11 @@ use padding_and_withdrawals::{
 };
 use trace_decoder::types::{HashedAccountAddr, TxnProofGenIR};
 
-use crate::mpt::{apply_diffs, insert_mpt, trim, Mpt};
 use crate::utils::{has_storage_deletion, keccak};
+use crate::{
+    mpt::{apply_diffs, insert_mpt, trim, Mpt},
+    rpc::get_block_hashes,
+};
 
 /// Keccak of empty bytes.
 pub const EMPTY_HASH: H256 = H256([
@@ -132,30 +136,6 @@ pub async fn get_block_metadata(
     ))
 }
 
-pub async fn get_block_hashes(block_number: U64, provider: &Provider<Http>) -> Result<BlockHashes> {
-    let mut prev_hashes = vec![H256::zero(); 256];
-    let cur_hash = provider
-        .get_block(block_number)
-        .await?
-        .ok_or_else(|| anyhow!("Block not found. Block number: {}", block_number))?
-        .hash
-        .unwrap();
-    for i in 1..=256 {
-        let hash = provider
-            .get_block(block_number - i)
-            .await?
-            .ok_or_else(|| anyhow!("Block not found. Block number: {}", block_number - i))?
-            .hash
-            .unwrap();
-        prev_hashes[256 - i] = hash;
-    }
-
-    Ok(BlockHashes {
-        prev_hashes,
-        cur_hash,
-    })
-}
-
 pub async fn gather_witness(tx: TxHash, provider: &Provider<Http>) -> Result<Vec<TxnProofGenIR>> {
     let tx = provider
         .get_transaction(tx)
@@ -171,7 +151,7 @@ pub async fn gather_witness(tx: TxHash, provider: &Provider<Http>) -> Result<Vec
     let mut contract_codes = contract_codes();
     let mut storage_mpts: HashMap<_, Mpt> = HashMap::new();
     let mut txn_rlps = vec![];
-    let chain_id = U256::one();
+    let chain_id = 13473.into();
     let mut alladdrs = vec![];
     let mut state = BTreeMap::<Address, AccountState>::new();
     let mut traces: Vec<BTreeMap<Address, AccountState>> = vec![];
@@ -359,7 +339,7 @@ pub async fn gather_witness(tx: TxHash, provider: &Provider<Http>) -> Result<Vec
         vec![]
     };
     // Block hashes
-    let block_hashes = get_block_hashes(block_number.into(), provider).await?;
+    let block_hashes = get_block_hashes(block_number, provider.url().as_ref()).await?;
 
     let mut storage_mpts: HashMap<_, _> = storage_mpts
         .iter()
@@ -403,22 +383,26 @@ pub async fn gather_witness(tx: TxHash, provider: &Provider<Http>) -> Result<Vec
         let mut new_bloom = bloom;
         new_bloom.accrue_bloom(&receipt.logs_bloom);
         let mut new_txns_mpt = txns_mpt.clone();
-        new_txns_mpt.insert(
-            Nibbles::from_bytes_be(&rlp::encode(&receipt.transaction_index)).unwrap(),
-            signed_txn.clone(),
-        );
+        new_txns_mpt
+            .insert(
+                Nibbles::from_bytes_be(&rlp::encode(&receipt.transaction_index)).unwrap(),
+                signed_txn.clone(),
+            )
+            .unwrap();
         let mut new_receipts_mpt = receipts_mpt.clone();
         let mut bytes = rlp::encode(&receipt).to_vec();
         if !receipt.transaction_type.unwrap().is_zero() {
             bytes.insert(0, receipt.transaction_type.unwrap().0[0] as u8);
         }
-        new_receipts_mpt.insert(
-            Nibbles::from_bytes_be(&rlp::encode(&receipt.transaction_index)).unwrap(),
-            bytes,
-        );
+        new_receipts_mpt
+            .insert(
+                Nibbles::from_bytes_be(&rlp::encode(&receipt.transaction_index)).unwrap(),
+                bytes,
+            )
+            .unwrap();
 
         // Use withdrawals for the last tx in the block.
-        let withdrawals = if last_tx { wds.clone() } else { vec![] };
+        let _withdrawals = if last_tx { wds.clone() } else { vec![] };
         // For the last tx, we check that the final trie roots match those in the block
         // header.
         let trie_roots_after = if last_tx {
@@ -442,7 +426,7 @@ pub async fn gather_witness(tx: TxHash, provider: &Provider<Http>) -> Result<Vec
                 receipts_trie: receipts_mpt.clone(),
                 storage_tries: trimmed_storage_mpts.into_iter().collect(),
             },
-            withdrawals,
+            withdrawals: vec![],
             contract_code: contract_codes.clone(),
             block_metadata: block_metadata.clone(),
             block_hashes: block_hashes.clone(),
@@ -495,8 +479,8 @@ pub async fn gather_witness(tx: TxHash, provider: &Provider<Http>) -> Result<Vec
     let dummies_added = pad_gen_inputs_with_dummy_inputs_if_needed(
         &mut proof_gen_ir,
         &b_data,
-        &initial_extra_data,
         &final_extra_data,
+        &initial_extra_data,
         &initial_tries_for_dummies,
         &final_tries,
         !wds.is_empty(),
