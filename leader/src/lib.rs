@@ -22,6 +22,7 @@ use mpt_trie::partial_trie::{HashedPartialTrie, Node, PartialTrie};
 use padding_and_withdrawals::{
     add_withdrawals_to_txns, pad_gen_inputs_with_dummy_inputs_if_needed, BlockMetaAndHashes,
 };
+use rpc::EthChainIdResponse;
 use trace_decoder::types::{HashedAccountAddr, TxnProofGenIR};
 
 use crate::utils::{has_storage_deletion, keccak};
@@ -151,7 +152,11 @@ pub async fn gather_witness(tx: TxHash, provider: &Provider<Http>) -> Result<Vec
     let mut contract_codes = contract_codes();
     let mut storage_mpts: HashMap<_, Mpt> = HashMap::new();
     let mut txn_rlps = vec![];
-    let chain_id = 13473.into();
+
+    let chain_id = EthChainIdResponse::fetch(provider.url().to_string())
+        .await?
+        .result;
+
     let mut alladdrs = vec![];
     let mut state = BTreeMap::<Address, AccountState>::new();
     let mut traces: Vec<BTreeMap<Address, AccountState>> = vec![];

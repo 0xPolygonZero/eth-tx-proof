@@ -128,3 +128,35 @@ pub(crate) async fn get_block_hashes(block_number: u64, url: &str) -> anyhow::Re
         cur_hash: curr_block_info.result.hash,
     })
 }
+
+/// The response from the `eth_chainId` RPC method.
+#[derive(Deserialize, Debug)]
+pub(crate) struct EthChainIdResponse {
+    pub(crate) result: U256,
+}
+
+impl EthChainIdResponse {
+    /// Fetches the chain id.
+    pub(crate) async fn fetch<U: IntoUrl>(rpc_url: U) -> anyhow::Result<Self> {
+        let client = reqwest::Client::new();
+        info!("Fetching chain id");
+
+        let response = client
+            .post(rpc_url)
+            .json(&serde_json::json!({
+                "jsonrpc": "2.0",
+                "method": "eth_chainId",
+                "params": [],
+                "id": 1,
+            }))
+            .send()
+            .await
+            .context("fetching eth_chainId")?;
+
+        let bytes = response.bytes().await?;
+        let des = &mut serde_json::Deserializer::from_slice(&bytes);
+        let parsed = serde_path_to_error::deserialize(des).context("deserializing eth_chainId")?;
+
+        Ok(parsed)
+    }
+}
