@@ -169,7 +169,9 @@ fn update_trie_state_from_withdrawals<'a>(
 
         acc_data.balance += amt;
 
-        state.insert(h_addr_nibs, rlp::encode(&acc_data).to_vec());
+        state
+            .insert(h_addr_nibs, rlp::encode(&acc_data).to_vec())
+            .unwrap();
     }
 }
 

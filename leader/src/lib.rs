@@ -23,7 +23,7 @@ use padding_and_withdrawals::{
     add_withdrawals_to_txns, pad_gen_inputs_with_dummy_inputs_if_needed, BlockMetaAndHashes,
 };
 use rpc::EthChainIdResponse;
-use trace_decoder::types::{HashedAccountAddr, TxnProofGenIR};
+use trace_decoder::types::{HashedAccountAddr, TrieRootHash, TxnProofGenIR};
 
 use crate::utils::{has_storage_deletion, keccak};
 use crate::{
@@ -35,6 +35,12 @@ use crate::{
 pub const EMPTY_HASH: H256 = H256([
     197, 210, 70, 1, 134, 247, 35, 60, 146, 126, 125, 178, 220, 199, 3, 192, 229, 0, 182, 83, 202,
     130, 39, 59, 123, 250, 216, 4, 93, 133, 164, 112,
+]);
+
+/// 0x56e81f171bcc55a6ff8345e692c0f86e5b48e01b996cadc001622fb5e363b421
+const EMPTY_TRIE_HASH: H256 = H256([
+    86, 232, 31, 23, 27, 204, 85, 166, 255, 131, 69, 230, 146, 192, 248, 110, 91, 72, 224, 27, 153,
+    108, 173, 192, 1, 98, 47, 181, 227, 99, 180, 33,
 ]);
 
 /// The current state of all tries as we process txn deltas. These are mutated
@@ -144,10 +150,14 @@ pub async fn gather_witness(tx: TxHash, provider: &Provider<Http>) -> Result<Vec
         .ok_or_else(|| anyhow!("Transaction not found."))?;
     let block_number = tx.block_number.unwrap().0[0];
     let tx_index = tx.transaction_index.unwrap().0[0] as usize;
+
     let block = provider
         .get_block(block_number)
         .await?
         .ok_or_else(|| anyhow!("Block not found. Block number: {}", block_number))?;
+
+    // println!("BLOCK: {:?}", block);
+
     let mut state_mpt = Mpt::new();
     let mut contract_codes = contract_codes();
     let mut storage_mpts: HashMap<_, Mpt> = HashMap::new();
@@ -161,18 +171,6 @@ pub async fn gather_witness(tx: TxHash, provider: &Provider<Http>) -> Result<Vec
     let mut state = BTreeMap::<Address, AccountState>::new();
     let mut traces: Vec<BTreeMap<Address, AccountState>> = vec![];
     let mut txns_info = vec![];
-
-    let initial_storage_tries = HashMap::from_iter(
-        storage_mpts
-            .iter()
-            .map(|(k, trie)| (*k, trie.to_partial_trie())),
-    );
-
-    let initial_tries_for_dummies = PartialTrieState {
-        state: state_mpt.to_partial_trie(),
-        storage: initial_storage_tries,
-        ..Default::default()
-    };
 
     for &hash in block.transactions.iter().take(tx_index + 1) {
         let txn = provider.get_transaction(hash);
@@ -345,6 +343,7 @@ pub async fn gather_witness(tx: TxHash, provider: &Provider<Http>) -> Result<Vec
     };
     // Block hashes
     let block_hashes = get_block_hashes(block_number, provider.url().as_ref()).await?;
+    let curr_hash = block_hashes.cur_hash;
 
     let mut storage_mpts: HashMap<_, _> = storage_mpts
         .iter()
@@ -410,6 +409,7 @@ pub async fn gather_witness(tx: TxHash, provider: &Provider<Http>) -> Result<Vec
         let _withdrawals = if last_tx { wds.clone() } else { vec![] };
         // For the last tx, we check that the final trie roots match those in the block
         // header.
+
         let trie_roots_after = if last_tx {
             TrieRoots {
                 state_root: block.state_root,
@@ -458,6 +458,25 @@ pub async fn gather_witness(tx: TxHash, provider: &Provider<Http>) -> Result<Vec
         b_hashes: block_hashes,
     };
 
+    let initial_tries_for_dummies = proof_gen_ir
+        .first()
+        .map(|ir| PartialTrieState {
+            state: ir.tries.state_trie.clone(),
+            txn: ir.tries.transactions_trie.clone(),
+            receipt: ir.tries.receipts_trie.clone(),
+            storage: HashMap::from_iter(ir.tries.storage_tries.iter().cloned()),
+        })
+        .unwrap_or_else(|| {
+            // No starting tries to work with, so we will have tries that are 100% hashed
+            // out.
+            PartialTrieState {
+                state: create_fully_hashed_out_trie_from_hash(curr_hash),
+                txn: create_fully_hashed_out_trie_from_hash(EMPTY_TRIE_HASH),
+                receipt: create_fully_hashed_out_trie_from_hash(EMPTY_TRIE_HASH),
+                storage: HashMap::default(),
+            }
+        });
+
     let initial_extra_data = ExtraBlockData {
         checkpoint_state_trie_root: prev_block.state_root,
         ..Default::default()
@@ -501,4 +520,11 @@ pub async fn gather_witness(tx: TxHash, provider: &Provider<Http>) -> Result<Vec
     );
 
     Ok(proof_gen_ir)
+}
+
+fn create_fully_hashed_out_trie_from_hash(h: TrieRootHash) -> HashedPartialTrie {
+    let mut trie = HashedPartialTrie::default();
+    trie.insert(Nibbles::default(), h);
+
+    trie
 }
