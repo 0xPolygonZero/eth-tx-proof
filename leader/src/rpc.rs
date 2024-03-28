@@ -160,3 +160,40 @@ impl EthChainIdResponse {
         Ok(parsed)
     }
 }
+
+#[derive(Debug, Deserialize)]
+pub(crate) struct CliqueGetSignersAtHashResponse {
+    pub(crate) result: CliqueGetSignersAtHashResult,
+}
+
+impl CliqueGetSignersAtHashResponse {
+    pub(crate) async fn fetch<U: IntoUrl>(rpc_url: U, b_hash: H256) -> anyhow::Result<Self> {
+        let client = reqwest::Client::new();
+        let b_hash_hex = format!("0x{:x}", b_hash);
+        info!("Fetching clique signer for block hash {}", b_hash_hex);
+
+        let response = client
+            .post(rpc_url)
+            .json(&serde_json::json!({
+                "jsonrpc": "2.0",
+                "method": "clique_getSignersAtHash",
+                "params": [b_hash_hex],
+                "id": 1,
+            }))
+            .send()
+            .await
+            .context("fetching clique_getSignersAtHash")?;
+
+        let bytes = response.bytes().await?;
+        let des = &mut serde_json::Deserializer::from_slice(&bytes);
+        let parsed = serde_path_to_error::deserialize(des)
+            .context("deserializing clique_getSignersAtHash")?;
+
+        Ok(parsed)
+    }
+}
+
+#[derive(Debug, Deserialize)]
+pub(crate) struct CliqueGetSignersAtHashResult {
+    pub(crate) signer: Address,
+}

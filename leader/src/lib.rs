@@ -22,7 +22,7 @@ use mpt_trie::partial_trie::{HashedPartialTrie, Node, PartialTrie};
 use padding_and_withdrawals::{
     add_withdrawals_to_txns, pad_gen_inputs_with_dummy_inputs_if_needed, BlockMetaAndHashes,
 };
-use rpc::EthChainIdResponse;
+use rpc::{CliqueGetSignersAtHashResponse, EthChainIdResponse};
 use trace_decoder::types::{HashedAccountAddr, TrieRootHash, TxnProofGenIR};
 
 use crate::utils::{has_storage_deletion, keccak};
@@ -121,14 +121,26 @@ pub async fn get_block_metadata(
     block_number: U64,
     block_chain_id: U256,
     provider: &Provider<Http>,
+    request_miner_from_clique: bool,
 ) -> Result<(BlockMetadata, H256)> {
     let block = provider
         .get_block(block_number)
         .await?
         .ok_or_else(|| anyhow!("Block not found. Block number: {}", block_number))?;
+
+    let block_beneficiary = match request_miner_from_clique {
+        false => block.author.unwrap(),
+        true => {
+            CliqueGetSignersAtHashResponse::fetch(provider.url().to_string(), block.hash.unwrap())
+                .await?
+                .result
+                .signer
+        }
+    };
+
     Ok((
         BlockMetadata {
-            block_beneficiary: block.author.unwrap(),
+            block_beneficiary,
             block_timestamp: block.timestamp,
             block_number: U256([block_number.0[0], 0, 0, 0]),
             block_difficulty: block.difficulty,
@@ -143,7 +155,11 @@ pub async fn get_block_metadata(
     ))
 }
 
-pub async fn gather_witness(tx: TxHash, provider: &Provider<Http>) -> Result<Vec<TxnProofGenIR>> {
+pub async fn gather_witness(
+    tx: TxHash,
+    provider: &Provider<Http>,
+    request_miner_from_clique: bool,
+) -> Result<Vec<TxnProofGenIR>> {
     let tx = provider
         .get_transaction(tx)
         .await?
@@ -324,8 +340,13 @@ pub async fn gather_witness(tx: TxHash, provider: &Provider<Http>) -> Result<Vec
         .ok_or_else(|| anyhow!("Block not found. Block number: {}", block_number - 1))?;
     state_mpt.root = prev_block.state_root;
 
-    let (block_metadata, _final_hash) =
-        get_block_metadata(block_number.into(), chain_id, provider).await?;
+    let (block_metadata, _final_hash) = get_block_metadata(
+        block_number.into(),
+        chain_id,
+        provider,
+        request_miner_from_clique,
+    )
+    .await?;
 
     let mut state_mpt = state_mpt.to_partial_trie();
     let mut txns_mpt = HashedPartialTrie::from(Node::Empty);
@@ -341,9 +362,9 @@ pub async fn gather_witness(tx: TxHash, provider: &Provider<Http>) -> Result<Vec
     } else {
         vec![]
     };
+
     // Block hashes
     let block_hashes = get_block_hashes(block_number, provider.url().as_ref()).await?;
-    let curr_hash = block_hashes.cur_hash;
 
     let mut storage_mpts: HashMap<_, _> = storage_mpts
         .iter()
@@ -470,7 +491,7 @@ pub async fn gather_witness(tx: TxHash, provider: &Provider<Http>) -> Result<Vec
             // No starting tries to work with, so we will have tries that are 100% hashed
             // out.
             PartialTrieState {
-                state: create_fully_hashed_out_trie_from_hash(curr_hash),
+                state: create_fully_hashed_out_trie_from_hash(block.state_root),
                 txn: create_fully_hashed_out_trie_from_hash(EMPTY_TRIE_HASH),
                 receipt: create_fully_hashed_out_trie_from_hash(EMPTY_TRIE_HASH),
                 storage: HashMap::default(),
@@ -524,7 +545,7 @@ pub async fn gather_witness(tx: TxHash, provider: &Provider<Http>) -> Result<Vec
 
 fn create_fully_hashed_out_trie_from_hash(h: TrieRootHash) -> HashedPartialTrie {
     let mut trie = HashedPartialTrie::default();
-    trie.insert(Nibbles::default(), h);
+    trie.insert(Nibbles::default(), h).unwrap();
 
     trie
 }
