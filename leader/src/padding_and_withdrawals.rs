@@ -101,6 +101,10 @@ pub(crate) fn add_withdrawals_to_txns(
     withdrawals: Vec<(Address, U256)>,
     dummies_already_added: bool,
 ) {
+    if withdrawals.is_empty() {
+        return;
+    }
+
     let withdrawals_with_hashed_addrs_iter = withdrawals
         .iter()
         .map(|(addr, v)| (*addr, hash(addr.as_bytes()), *v));
