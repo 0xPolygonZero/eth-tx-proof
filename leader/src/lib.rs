@@ -172,8 +172,6 @@ pub async fn gather_witness(
         .await?
         .ok_or_else(|| anyhow!("Block not found. Block number: {}", block_number))?;
 
-    // println!("BLOCK: {:?}", block);
-
     let mut state_mpt = Mpt::new();
     let mut contract_codes = contract_codes();
     let mut storage_mpts: HashMap<_, Mpt> = HashMap::new();

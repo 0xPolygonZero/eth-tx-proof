@@ -113,9 +113,6 @@ pub(crate) fn add_withdrawals_to_txns(
         // If we have no actual dummy proofs, then we create one and append it to the
         // end of the block.
         false => {
-            // TODO: Decide if we want this allocation...
-            // To avoid double hashing the addrs, but I don't know if the extra `Vec`
-            // allocation is worth it.
             let withdrawals_with_hashed_addrs: Vec<_> =
                 withdrawals_with_hashed_addrs_iter.collect();
 

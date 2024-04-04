@@ -27,8 +27,6 @@ impl Operation for TxProof {
     type Output = AggregatableProof;
 
     fn execute(&self, input: Self::Input) -> Result<Self::Output> {
-        println!("Input: {:#?}", input);
-
         // If we hit a dummy txn, there is no signed txn, so we must come up with a
         // backup identifier to use for logging.
         let tx_ident = input
