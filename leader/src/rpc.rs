@@ -1,5 +1,5 @@
 use anyhow::Context;
-use ethers::types::{Address, Bloom, H256, U256};
+use ethers::types::{Address, H256, U256};
 use evm_arithmetization::proof::BlockHashes;
 use futures::{stream::FuturesOrdered, TryStreamExt};
 use reqwest::IntoUrl;
@@ -9,22 +9,9 @@ use tracing::info;
 #[derive(Deserialize, Debug)]
 #[serde(rename_all = "camelCase")]
 struct EthGetBlockByNumberResult {
-    base_fee_per_gas: U256,
-    difficulty: U256,
-    gas_limit: U256,
-    gas_used: U256,
     hash: H256,
-    logs_bloom: Bloom,
-    miner: Address,
-    mix_hash: H256,
     number: U256,
     parent_hash: H256,
-    state_root: H256,
-    timestamp: U256,
-
-    // Pre-eip-4895 blocks won't have this field, so if it's missing, using an empty vec is fine.
-    #[serde(default)]
-    withdrawals: Vec<Withdrawal>,
 }
 
 #[derive(Deserialize, Debug)]
