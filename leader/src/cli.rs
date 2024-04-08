@@ -20,6 +20,11 @@ pub enum Command {
         /// The transaction hash from which to generate the witness.
         #[arg(long, short)]
         transaction_hash: TxHash,
+
+        /// If enabled, we will instead attempt to get the block miner from
+        /// clique.
+        #[arg(long, short)]
+        request_miner_from_clique: bool,
     },
     /// Generates a proof from the given witness and outputs it to stdout.
     Prove {

@@ -4,13 +4,13 @@ use paladin::{
     operation::{FatalError, Monoid, Operation, Result},
     registry, RemoteExecute,
 };
-use plonky_block_proof_gen::{
+use proof_gen::{
     proof_gen::{generate_agg_proof, generate_block_proof, generate_txn_proof},
     proof_types::{AggregatableProof, GeneratedAggProof, GeneratedBlockProof},
     prover_state::ProverState,
 };
-use protocol_decoder::types::TxnProofGenIR;
 use serde::{Deserialize, Serialize};
+use trace_decoder::types::TxnProofGenIR;
 use tracing::{info_span, Level};
 
 fn p_state() -> &'static ProverState {
@@ -27,25 +27,33 @@ impl Operation for TxProof {
     type Output = AggregatableProof;
 
     fn execute(&self, input: Self::Input) -> Result<Self::Output> {
-        let tx_hash = rlp::decode::<Transaction>(
-            input
-                .gen_inputs
-                .signed_txn
-                .as_ref()
-                .expect("signed txn is missing"),
-        )
-        .expect("failed to decode signed transaction")
-        .hash;
+        // If we hit a dummy txn, there is no signed txn, so we must come up with a
+        // backup identifier to use for logging.
+        let tx_ident = input
+            .signed_txn
+            .as_ref()
+            .map(|txn| {
+                rlp::decode::<Transaction>(txn)
+                    .expect("failed to decode signed transaction")
+                    .hash
+                    .to_string()
+            })
+            .unwrap_or_else(|| {
+                format!(
+                    "Dummy txn for block {} at {}",
+                    input.block_metadata.block_number, input.txn_number_before
+                )
+            });
 
-        let _span = info_span!("generate proof", tx_hash = ?tx_hash).entered();
-        tracing::event!(Level::INFO, "generating proof for {:?}", tx_hash);
+        let _span = info_span!("generate proof", tx_hash = ?tx_ident).entered();
+        tracing::event!(Level::INFO, "generating proof for {:?}", tx_ident);
 
         let start = std::time::Instant::now();
         let result = generate_txn_proof(p_state(), input, None).map_err(FatalError::from)?;
         tracing::event!(
             Level::INFO,
             "generate transaction proof for {:?} took {:?}",
-            tx_hash,
+            tx_ident,
             start.elapsed()
         );
 

@@ -4,12 +4,12 @@ use paladin::{
     directive::{Directive, IndexedStream, Literal},
     runtime::Runtime,
 };
-use plonky_block_proof_gen::{
+use proof_gen::{
     proof_types::{AggregatableProof, GeneratedBlockProof},
     types::PlonkyProofIntern,
 };
-use protocol_decoder::types::TxnProofGenIR;
 use serde::{Deserialize, Serialize};
+use trace_decoder::types::TxnProofGenIR;
 
 #[derive(Debug, Deserialize, Serialize)]
 pub struct ProverInput {
