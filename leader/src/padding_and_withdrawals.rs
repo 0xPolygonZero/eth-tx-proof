@@ -248,6 +248,7 @@ fn create_dummy_gen_input_common(
         gas_used_before: extra_data.gas_used_before,
         gas_used_after: extra_data.gas_used_after,
         contract_code: HashMap::default(),
+        global_exit_roots: vec![],
         withdrawals: vec![], // this is set after creating dummy payloads
     }
 }

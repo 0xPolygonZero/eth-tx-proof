@@ -1,13 +1,15 @@
 use common::prover_state::P_STATE;
 use ethers::types::Transaction;
+use evm_arithmetization::prover::testing::simulate_execution;
 use paladin::{
     operation::{FatalError, Monoid, Operation, Result},
     registry, RemoteExecute,
 };
 use proof_gen::{
-    proof_gen::{generate_agg_proof, generate_block_proof, generate_txn_proof},
+    proof_gen::{generate_agg_proof, generate_block_proof},
     proof_types::{AggregatableProof, GeneratedAggProof, GeneratedBlockProof},
     prover_state::ProverState,
+    types::Field,
 };
 use serde::{Deserialize, Serialize};
 use trace_decoder::types::TxnProofGenIR;
@@ -24,7 +26,7 @@ pub struct TxProof;
 
 impl Operation for TxProof {
     type Input = TxnProofGenIR;
-    type Output = AggregatableProof;
+    type Output = ();
 
     fn execute(&self, input: Self::Input) -> Result<Self::Output> {
         // If we hit a dummy txn, there is no signed txn, so we must come up with a
@@ -49,7 +51,9 @@ impl Operation for TxProof {
         tracing::event!(Level::INFO, "generating proof for {:?}", tx_ident);
 
         let start = std::time::Instant::now();
-        let result = generate_txn_proof(p_state(), input, None).map_err(FatalError::from)?;
+        let result = simulate_execution::<Field>(input).map_err(|err| {
+            FatalError::from_anyhow(err, paladin::operation::FatalStrategy::Terminate)
+        })?;
         tracing::event!(
             Level::INFO,
             "generate transaction proof for {:?} took {:?}",

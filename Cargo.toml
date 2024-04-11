@@ -9,10 +9,10 @@ ethers = "2.0.7"
 tokio = { version = "1", features = ["full"] }
 anyhow = "1.0.71"
 plonky2 = "0.2.1"
-evm_arithmetization = { git = "https://github.com/0xPolygonZero/zk_evm.git", branch = "develop" }
+evm_arithmetization = { git = "https://github.com/0xPolygonZero/zk_evm.git", branch = "feat/cancun" }
 clap = { version = "4.4.11", features = ["derive", "env"] }
-trace_decoder = { git = "https://github.com/0xPolygonZero/zk_evm.git", branch = "develop" }
-proof_gen = { git = "https://github.com/0xPolygonZero/zk_evm.git", branch = "develop" }
+trace_decoder = { git = "https://github.com/0xPolygonZero/zk_evm.git", branch = "feat/cancun" }
+proof_gen = { git = "https://github.com/0xPolygonZero/zk_evm.git", branch = "feat/cancun" }
 dotenvy = "0.15.7"
 paladin-core = "0.4.1"
 serde = { version = "1.0.193", features = ["derive"] }

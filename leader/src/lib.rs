@@ -150,6 +150,9 @@ pub async fn get_block_metadata(
             block_bloom: convert_bloom(block.logs_bloom.unwrap()),
             block_gas_used: block.gas_used,
             block_random: block.mix_hash.unwrap(),
+            block_blob_gas_used: block.blob_gas_used.unwrap(),
+            block_excess_blob_gas: block.excess_blob_gas.unwrap(),
+            parent_beacon_block_root: block.parent_beacon_block_root.unwrap(),
         },
         block.state_root,
     ))
@@ -454,6 +457,7 @@ pub async fn gather_witness(
             contract_code: contract_codes.clone(),
             block_metadata: block_metadata.clone(),
             block_hashes: block_hashes.clone(),
+            global_exit_roots: vec![],
             gas_used_before: gas_used,
             gas_used_after: gas_used + receipt.gas_used.unwrap(),
             checkpoint_state_trie_root: prev_block.state_root, // TODO: make it configurable

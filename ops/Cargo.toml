@@ -11,6 +11,7 @@ proof_gen = { workspace = true }
 trace_decoder = { workspace = true }
 tracing = { workspace = true }
 ethers = { workspace = true }
+evm_arithmetization = { workspace = true }
 
 rlp = "0.5.2"
 

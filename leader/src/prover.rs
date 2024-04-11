@@ -1,15 +1,14 @@
-use anyhow::{bail, Result};
-use ops::{AggProof, BlockProof, TxProof};
+use anyhow::Result;
+use futures::TryStreamExt;
+use ops::TxProof;
 use paladin::{
-    directive::{Directive, IndexedStream, Literal},
+    directive::{Directive, IndexedStream},
     runtime::Runtime,
 };
-use proof_gen::{
-    proof_types::{AggregatableProof, GeneratedBlockProof},
-    types::PlonkyProofIntern,
-};
+use proof_gen::{proof_types::GeneratedBlockProof, types::PlonkyProofIntern};
 use serde::{Deserialize, Serialize};
 use trace_decoder::types::TxnProofGenIR;
+use tracing::info;
 
 #[derive(Debug, Deserialize, Serialize)]
 pub struct ProverInput {
@@ -22,23 +21,22 @@ impl ProverInput {
         runtime: &Runtime,
         _previous: Option<PlonkyProofIntern>,
     ) -> Result<GeneratedBlockProof> {
-        tracing::info!("Proving block");
-        let agg_proof = IndexedStream::from(self.proof_gen_ir)
+        let b_number = self.proof_gen_ir[0].block_metadata.block_number;
+        tracing::info!("Generating witness for block {:?}", b_number);
+
+        IndexedStream::from(self.proof_gen_ir)
             .map(&TxProof)
-            .fold(&AggProof)
             .run(runtime)
+            .await?
+            .try_collect::<Vec<_>>()
             .await?;
 
-        if let AggregatableProof::Agg(proof) = agg_proof {
-            let block_proof = Literal(proof)
-                .map(&BlockProof { prev: None })
-                .run(runtime)
-                .await?;
-            tracing::info!("Block proof generated");
+        info!("Successfully generated witness for block {:?}!", b_number);
 
-            Ok(block_proof.0)
-        } else {
-            bail!("AggProof is is not GeneratedAggProof")
-        }
+        // Dummy proof to match expected output type.
+        Ok(GeneratedBlockProof {
+            b_height: b_number.as_u64(),
+            intern: proof_gen::proof_gen::dummy_proof()?,
+        })
     }
 }
