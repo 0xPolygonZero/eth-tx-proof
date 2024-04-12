@@ -16,6 +16,7 @@ use ethers::utils::rlp;
 use evm_arithmetization::generation::{GenerationInputs, TrieInputs};
 use evm_arithmetization::proof::TrieRoots;
 use evm_arithmetization::proof::{BlockMetadata, ExtraBlockData};
+use evm_arithmetization::testing_utils::{BEACON_ROOTS_ADDRESS, HISTORY_BUFFER_LENGTH};
 use itertools::izip;
 use mpt_trie::nibbles::Nibbles;
 use mpt_trie::partial_trie::{HashedPartialTrie, Node, PartialTrie};
@@ -193,6 +194,35 @@ pub async fn gather_witness(
     let mut state = BTreeMap::<Address, AccountState>::new();
     let mut traces: Vec<BTreeMap<Address, AccountState>> = vec![];
     let mut txns_info = vec![];
+
+    let mut beacon_root_storage_keys = vec![];
+
+    // Beacon block roots contract
+    {
+        for slot in 0..HISTORY_BUFFER_LENGTH.1 {
+            let mut bytes = [0; 32];
+            U256::from(slot).to_big_endian(&mut bytes);
+            let key = keccak(bytes);
+
+            beacon_root_storage_keys.push(H256(key));
+        }
+        let (proof, storage_proofs, storage_hash, _account_is_empty) = get_proof(
+            H160(BEACON_ROOTS_ADDRESS.1),
+            beacon_root_storage_keys.clone(),
+            (block_number - 1).into(),
+            provider,
+        )
+        .await?;
+        insert_mpt(&mut state_mpt, proof);
+
+        let mut beacon_root_storage_mpt = Mpt::new();
+        beacon_root_storage_mpt.root = storage_hash;
+        for sp in storage_proofs {
+            insert_mpt(&mut beacon_root_storage_mpt, sp.proof);
+        }
+        let key = keccak(BEACON_ROOTS_ADDRESS.1);
+        storage_mpts.insert(key.into(), beacon_root_storage_mpt);
+    }
 
     for &hash in block.transactions.iter().take(tx_index + 1) {
         let txn = provider.get_transaction(hash);
