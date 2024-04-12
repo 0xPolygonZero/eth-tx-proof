@@ -2,7 +2,6 @@ use std::path::PathBuf;
 
 use clap::{Parser, Subcommand, ValueHint};
 use common::prover_state::cli::CliProverStateConfig;
-use ethers::types::TxHash;
 
 #[derive(Parser)]
 pub struct Cli {
@@ -17,9 +16,9 @@ pub enum Command {
         /// The RPC URL.
         #[arg(long, short = 'u', value_hint = ValueHint::Url, env = "RPC_URL")]
         rpc_url: String,
-        /// The transaction hash from which to generate the witness.
+        /// The block number from which to generate the witness.
         #[arg(long, short)]
-        transaction_hash: TxHash,
+        block_number: u64,
 
         /// If enabled, we will instead attempt to get the block miner from
         /// clique.

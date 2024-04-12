@@ -48,7 +48,12 @@ impl Operation for TxProof {
             });
 
         let _span = info_span!("generate proof", tx_hash = ?tx_ident).entered();
-        tracing::event!(Level::INFO, "generating proof for {:?}", tx_ident);
+        tracing::event!(
+            Level::INFO,
+            "generating proof for txn {:?} ({:?})",
+            input.txn_number_before,
+            tx_ident
+        );
 
         let start = std::time::Instant::now();
         let result = simulate_execution::<Field>(input).map_err(|err| {

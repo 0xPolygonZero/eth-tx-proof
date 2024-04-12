@@ -159,14 +159,19 @@ pub async fn get_block_metadata(
 }
 
 pub async fn gather_witness(
-    tx: TxHash,
+    block_number: u64,
     provider: &Provider<Http>,
     request_miner_from_clique: bool,
 ) -> Result<Vec<TxnProofGenIR>> {
+    let block = provider
+        .get_block(BlockId::from(block_number))
+        .await?
+        .ok_or_else(|| anyhow!("Block not found."))?;
+    let tx = TxHash(block.transactions.last().unwrap().0);
     let tx = provider
         .get_transaction(tx)
         .await?
-        .ok_or_else(|| anyhow!("Transaction not found."))?;
+        .ok_or_else(|| anyhow!("Block not found."))?;
     let block_number = tx.block_number.unwrap().0[0];
     let tx_index = tx.transaction_index.unwrap().0[0] as usize;
 

@@ -26,14 +26,17 @@ async fn main() -> Result<()> {
     match args.command {
         Command::Rpc {
             rpc_url,
-            transaction_hash,
+            block_number,
             request_miner_from_clique,
         } => {
             let provider = Provider::<Http>::try_from(&rpc_url)?;
 
             let gen_inputs =
-                gather_witness(transaction_hash, &provider, request_miner_from_clique).await?;
-            std::io::stdout().write_all(&serde_json::to_vec(&gen_inputs)?)?;
+                gather_witness(block_number, &provider, request_miner_from_clique).await?;
+            std::fs::write(
+                format!("{:?}.json", gen_inputs[0].block_metadata.block_number),
+                &serde_json::to_vec(&gen_inputs)?,
+            )?;
         }
         Command::Prove {
             input_witness,

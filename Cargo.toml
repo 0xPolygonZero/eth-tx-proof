@@ -22,5 +22,3 @@ tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 [profile.release]
 opt-level = 3
 incremental = true
-lto = "fat"
-codegen-units = 1

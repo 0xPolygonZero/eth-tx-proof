@@ -76,13 +76,13 @@ impl Circuit {
     /// Get the default size for the circuit.
     pub const fn default_size(&self) -> Range<usize> {
         match self {
-            Circuit::Arithmetic => 16..23,
-            Circuit::BytePacking => 9..21,
-            Circuit::Cpu => 12..25,
-            Circuit::Keccak => 14..20,
-            Circuit::KeccakSponge => 9..15,
-            Circuit::Logic => 12..18,
-            Circuit::Memory => 17..28,
+            Circuit::Arithmetic => 16..17,
+            Circuit::BytePacking => 9..10,
+            Circuit::Cpu => 12..13,
+            Circuit::Keccak => 14..15,
+            Circuit::KeccakSponge => 9..10,
+            Circuit::Logic => 12..13,
+            Circuit::Memory => 17..18,
         }
     }
 
