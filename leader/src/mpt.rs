@@ -9,13 +9,13 @@ use mpt_trie::partial_trie::PartialTrie;
 use mpt_trie::partial_trie::{HashedPartialTrie, Node};
 use mpt_trie::trie_subsets::create_trie_subset;
 
-use crate::utils::keccak;
+use crate::utils::{keccak, keccak_if_long_enough};
 use crate::EMPTY_HASH;
 
 #[derive(Clone, Debug)]
 pub struct MptNode(Vec<u8>);
 
-#[derive(Default)]
+#[derive(Default, Debug)]
 pub struct Mpt {
     pub mpt: HashMap<H256, MptNode>,
     pub root: H256,
@@ -133,9 +133,16 @@ pub fn insert_mpt(mpt: &mut Mpt, proof: Vec<Bytes>) {
 }
 
 fn insert_mpt_helper(mpt: &mut Mpt, rlp_node: Bytes) {
-    mpt.mpt
-        .insert(H256(keccak(&rlp_node)), MptNode(rlp_node.to_vec()));
     let a = rlp::decode_list::<Vec<u8>>(&rlp_node);
+    if a.len() < 2 {
+        panic!("All nodes are encodings of a list of size > 2")
+    }
+    let prefix = a[0].clone();
+
+    mpt.mpt.insert(
+        H256(keccak_if_long_enough(&rlp_node)),
+        MptNode(rlp_node.to_vec()),
+    );
     if a.len() == 2 {
         let prefix = a[0].clone();
         let is_leaf = (prefix[0] >> 4 == 2) || (prefix[0] >> 4 == 3);
@@ -145,7 +152,8 @@ fn insert_mpt_helper(mpt: &mut Mpt, rlp_node: Bytes) {
                 nibbles.to_hex_prefix_encoding(is_leaf).to_vec(),
                 a[1].clone(),
             ]);
-            mpt.mpt.insert(H256(keccak(&node)), MptNode(node.to_vec()));
+            mpt.mpt
+                .insert(H256(keccak_if_long_enough(&node)), MptNode(node.to_vec()));
             if nibbles.is_empty() {
                 break;
             }

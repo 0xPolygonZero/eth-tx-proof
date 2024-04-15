@@ -105,9 +105,21 @@ pub(crate) fn add_withdrawals_to_txns(
         return;
     }
 
+    tracing::debug!(
+        "txns_trie sin kechun = {:?}, y su hash = {:?}",
+        txn_ir[0].tries.transactions_trie,
+        txn_ir[0].tries.transactions_trie.hash()
+    );
+
     let withdrawals_with_hashed_addrs_iter = withdrawals
         .iter()
         .map(|(addr, v)| (*addr, hash(addr.as_bytes()), *v));
+
+    tracing::debug!(
+        "txns_trie casi sin kechun = {:?}, y su hash = {:?}",
+        txn_ir[0].tries.transactions_trie,
+        txn_ir[0].tries.transactions_trie.hash()
+    );
 
     match dummies_already_added {
         // If we have no actual dummy proofs, then we create one and append it to the
@@ -115,6 +127,11 @@ pub(crate) fn add_withdrawals_to_txns(
         false => {
             let withdrawals_with_hashed_addrs: Vec<_> =
                 withdrawals_with_hashed_addrs_iter.collect();
+            tracing::debug!(
+                "txns_trie muy poquito kechun = {:?}, y su hash = {:?}",
+                txn_ir[0].tries.transactions_trie,
+                txn_ir[0].tries.transactions_trie.hash()
+            );
 
             // Dummy state will be the state after the final txn. Also need to include the
             // account nodes that were accessed by the withdrawals.
@@ -122,6 +139,11 @@ pub(crate) fn add_withdrawals_to_txns(
                 .iter()
                 .cloned()
                 .map(|(_, h_addr, _)| h_addr);
+            tracing::debug!(
+                "txns_trie poquito kechun = {:?}, y su hash = {:?}",
+                txn_ir[0].tries.transactions_trie,
+                txn_ir[0].tries.transactions_trie.hash()
+            );
             let mut withdrawal_dummy = create_dummy_gen_input_with_state_addrs_accessed(
                 other_data,
                 final_extra_data,
@@ -129,17 +151,48 @@ pub(crate) fn add_withdrawals_to_txns(
                 withdrawal_addrs,
             );
 
+            tracing::debug!(
+                "txns_trie sin kechun = {:?}, y su hash = {:?}",
+                txn_ir[0].tries.transactions_trie,
+                txn_ir[0].tries.transactions_trie.hash()
+            );
+
             update_trie_state_from_withdrawals(
                 withdrawals_with_hashed_addrs,
                 &mut final_trie_state.state,
             );
 
+            tracing::debug!(
+                "txns_trie con poco kechun = {:?}, y su hash = {:?}",
+                txn_ir[0].tries.transactions_trie,
+                txn_ir[0].tries.transactions_trie.hash()
+            );
+
             withdrawal_dummy.withdrawals = withdrawals;
 
             // Only the state root hash needs to be updated from the withdrawals.
+
+            tracing::debug!(
+                "omg = {:?}, y su hash = {:?}",
+                txn_ir[0].tries.transactions_trie,
+                txn_ir[0].tries.transactions_trie.hash()
+            );
             withdrawal_dummy.trie_roots_after.state_root = final_trie_state.state.hash();
 
+            tracing::debug!(
+                "txns_trie con kechun = {:?}, y su hash = {:?}",
+                txn_ir[0].tries.transactions_trie,
+                txn_ir[0].tries.transactions_trie.hash()
+            );
+
+            tracing::debug!("txn_it con kechun = {:?}", txn_ir.len());
             txn_ir.push(withdrawal_dummy);
+
+            tracing::debug!(
+                "txns_trie con kechun = {:?}, y su hash = {:?}",
+                txn_ir[0].tries.transactions_trie,
+                txn_ir[0].tries.transactions_trie.hash()
+            );
         }
         true => {
             update_trie_state_from_withdrawals(
@@ -151,6 +204,12 @@ pub(crate) fn add_withdrawals_to_txns(
             // case), then this dummy will get the withdrawals.
             txn_ir[1].withdrawals = withdrawals;
             txn_ir[1].trie_roots_after.state_root = final_trie_state.state.hash();
+
+            tracing::debug!(
+                "txns_trie con doble kechun = {:?}, y su hash = {:?}",
+                txn_ir[0].tries.transactions_trie,
+                txn_ir[0].tries.transactions_trie.hash()
+            );
         }
     }
 }

@@ -5,6 +5,18 @@ pub fn keccak<T: AsRef<[u8]> + Clone>(bytes: T) -> [u8; 32] {
     keccak256(bytes.clone())
 }
 
+pub fn keccak_if_long_enough<T: AsRef<[u8]> + Clone>(bytes: T) -> [u8; 32] {
+    match bytes.as_ref().len() <= 32 {
+        true => {
+            let mut padded_bytes: [u8; 32] = Default::default();
+            padded_bytes[32 - bytes.as_ref().len()..].copy_from_slice(bytes.as_ref());
+            padded_bytes
+        }
+
+        false => keccak(bytes),
+    }
+}
+
 pub fn has_storage_deletion(trace: &GethTrace) -> bool {
     let diff = if let GethTrace::Known(GethTraceFrame::PreStateTracer(PreStateFrame::Diff(diff))) =
         trace

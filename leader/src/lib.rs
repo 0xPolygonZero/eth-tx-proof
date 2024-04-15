@@ -213,7 +213,13 @@ pub async fn gather_witness(
             provider,
         )
         .await?;
+        tracing::debug!(
+            "beacon root address len = {:?} and addr = {:?}",
+            proof.len(),
+            H160(BEACON_ROOTS_ADDRESS.1)
+        );
         insert_mpt(&mut state_mpt, proof);
+        tracing::debug!("state_mpt after beacon insert = {:#?}", state_mpt);
 
         let mut beacon_root_storage_mpt = Mpt::new();
         beacon_root_storage_mpt.root = storage_hash;
@@ -386,6 +392,7 @@ pub async fn gather_witness(
 
     let mut state_mpt = state_mpt.to_partial_trie();
     let mut txns_mpt = HashedPartialTrie::from(Node::Empty);
+    tracing::debug!("txns_mpt = {:?}, hash = {:?}", txns_mpt, txns_mpt.hash());
     let mut receipts_mpt = HashedPartialTrie::from(Node::Empty);
     let mut gas_used = U256::zero();
     let mut bloom: Bloom = Bloom::zero();
@@ -518,11 +525,18 @@ pub async fn gather_witness(
 
     let initial_tries_for_dummies = proof_gen_ir
         .first()
-        .map(|ir| PartialTrieState {
-            state: ir.tries.state_trie.clone(),
-            txn: ir.tries.transactions_trie.clone(),
-            receipt: ir.tries.receipts_trie.clone(),
-            storage: HashMap::from_iter(ir.tries.storage_tries.iter().cloned()),
+        .map(|ir| {
+            tracing::debug!(
+                "txns_trie dsad= {:#?}, hash = {:?}",
+                ir.tries.transactions_trie,
+                ir.tries.transactions_trie.hash()
+            );
+            PartialTrieState {
+                state: ir.tries.state_trie.clone(),
+                txn: ir.tries.transactions_trie.clone(),
+                receipt: ir.tries.receipts_trie.clone(),
+                storage: HashMap::from_iter(ir.tries.storage_tries.iter().cloned()),
+            }
         })
         .unwrap_or_else(|| {
             // No starting tries to work with, so we will have tries that are 100% hashed
@@ -534,6 +548,12 @@ pub async fn gather_witness(
                 storage: HashMap::default(),
             }
         });
+
+    tracing::debug!(
+        "txns_trie for dummies = {:?}, y su hash = {:?}",
+        initial_tries_for_dummies.txn,
+        initial_tries_for_dummies.txn.hash()
+    );
 
     let initial_extra_data = ExtraBlockData {
         checkpoint_state_trie_root: prev_block.state_root,
@@ -568,6 +588,12 @@ pub async fn gather_witness(
         !wds.is_empty(),
     );
 
+    tracing::debug!(
+        "txns_trie sin mayo = {:?}, y su hash = {:?}",
+        proof_gen_ir[0].tries.transactions_trie,
+        proof_gen_ir[0].tries.transactions_trie.hash()
+    );
+
     add_withdrawals_to_txns(
         &mut proof_gen_ir,
         &b_data,
@@ -577,6 +603,11 @@ pub async fn gather_witness(
         dummies_added,
     );
 
+    tracing::debug!(
+        "txns_trie con mayo = {:?}, y su hash = {:?}",
+        proof_gen_ir[0].tries.transactions_trie,
+        proof_gen_ir[0].tries.transactions_trie.hash()
+    );
     Ok(proof_gen_ir)
 }
 
