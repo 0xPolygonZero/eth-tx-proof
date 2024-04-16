@@ -219,15 +219,15 @@ pub async fn gather_witness(
             H160(BEACON_ROOTS_ADDRESS.1)
         );
         tracing::debug!("la root = {:?}", state_mpt.root);
-        insert_mpt(&mut state_mpt, proof);
+        // insert_mpt(&mut state_mpt, proof);
         tracing::debug!("la root = {:?}", state_mpt.root);
         tracing::debug!("state_mpt after beacon insert = {:#?}", state_mpt);
 
         let mut beacon_root_storage_mpt = Mpt::new();
         beacon_root_storage_mpt.root = storage_hash;
-        for sp in storage_proofs {
-            insert_mpt(&mut beacon_root_storage_mpt, sp.proof);
-        }
+        // for sp in storage_proofs {
+        //     insert_mpt(&mut beacon_root_storage_mpt, sp.proof);
+        // }
         let key = keccak(BEACON_ROOTS_ADDRESS.1);
         storage_mpts.insert(key.into(), beacon_root_storage_mpt);
     }
@@ -291,22 +291,22 @@ pub async fn gather_witness(
             provider,
         )
         .await?;
-        insert_mpt(&mut state_mpt, proof);
+        // insert_mpt(&mut state_mpt, proof);
 
         let (next_proof, next_storage_proof, _next_storage_hash, _next_account_is_empty) =
             get_proof(*address, storage_keys, block_number.into(), provider).await?;
-        insert_mpt(&mut state_mpt, next_proof);
+        // insert_mpt(&mut state_mpt, next_proof);
 
         let key = keccak(address.0);
         if !empty_storage {
             let mut storage_mpt = Mpt::new();
             storage_mpt.root = storage_hash;
-            for sp in storage_proof {
-                insert_mpt(&mut storage_mpt, sp.proof);
-            }
-            for sp in next_storage_proof {
-                insert_mpt(&mut storage_mpt, sp.proof);
-            }
+            // for sp in storage_proof {
+            //     insert_mpt(&mut storage_mpt, sp.proof);
+            // }
+            // for sp in next_storage_proof {
+            //     insert_mpt(&mut storage_mpt, sp.proof);
+            // }
             storage_mpts.insert(key.into(), storage_mpt);
         }
         if let Some(code) = code {
@@ -346,11 +346,11 @@ pub async fn gather_witness(
                     provider,
                 )
                 .await?;
-                insert_mpt(&mut state_mpt, proof);
+                // insert_mpt(&mut state_mpt, proof);
 
                 let (next_proof, next_storage_proof, _next_storage_hash, _next_account_is_empty) =
                     get_proof(address, storage_keys, block_number.into(), provider).await?;
-                insert_mpt(&mut state_mpt, next_proof);
+                // insert_mpt(&mut state_mpt, next_proof);
 
                 let key = keccak(address.0);
                 if !empty_storage {
@@ -358,12 +358,12 @@ pub async fn gather_witness(
                     let storage_mpt = storage_mpts
                         .get_mut(&key.into())
                         .unwrap_or(&mut storage_mpt);
-                    for sp in storage_proof {
-                        insert_mpt(storage_mpt, sp.proof);
-                    }
-                    for sp in next_storage_proof {
-                        insert_mpt(storage_mpt, sp.proof);
-                    }
+                    // for sp in storage_proof {
+                    //     insert_mpt(storage_mpt, sp.proof);
+                    // }
+                    // for sp in next_storage_proof {
+                    //     insert_mpt(storage_mpt, sp.proof);
+                    // }
                     // storage_mpts.insert(key.into(), storage_mpt);
                 }
             }
@@ -394,8 +394,13 @@ pub async fn gather_witness(
 
     let mut state_mpt = state_mpt.to_partial_trie();
     let mut txns_mpt = HashedPartialTrie::from(Node::Empty);
-    tracing::debug!("txns_mpt = {:?}, hash = {:?}", txns_mpt, txns_mpt.hash());
     let mut receipts_mpt = HashedPartialTrie::from(Node::Empty);
+    tracing::info!("txns_mpt = {:?}, hash = {:?}", txns_mpt, txns_mpt.hash());
+    tracing::info!(
+        "receipts_mpt = {:?}, hash = {:?}",
+        receipts_mpt,
+        receipts_mpt.hash()
+    );
     let mut gas_used = U256::zero();
     let mut bloom: Bloom = Bloom::zero();
 
@@ -508,6 +513,18 @@ pub async fn gather_witness(
             trie_roots_after,
             txn_number_before: receipt.transaction_index.0[0].into(),
         };
+        if inputs.txn_number_before < 2.into() {
+            tracing::info!(
+                "txns_mpt before = {:?}, hash = {:?}",
+                txns_mpt,
+                txns_mpt.hash()
+            );
+            tracing::info!(
+                "receipts_mpt after = {:?}, hash = {:?}",
+                receipts_mpt,
+                receipts_mpt.hash()
+            );
+        }
 
         state_mpt = next_state_mpt;
         storage_mpts = next_storage_mpts;
@@ -527,18 +544,11 @@ pub async fn gather_witness(
 
     let initial_tries_for_dummies = proof_gen_ir
         .first()
-        .map(|ir| {
-            tracing::debug!(
-                "txns_trie dsad= {:#?}, hash = {:?}",
-                ir.tries.transactions_trie,
-                ir.tries.transactions_trie.hash()
-            );
-            PartialTrieState {
-                state: ir.tries.state_trie.clone(),
-                txn: ir.tries.transactions_trie.clone(),
-                receipt: ir.tries.receipts_trie.clone(),
-                storage: HashMap::from_iter(ir.tries.storage_tries.iter().cloned()),
-            }
+        .map(|ir| PartialTrieState {
+            state: ir.tries.state_trie.clone(),
+            txn: ir.tries.transactions_trie.clone(),
+            receipt: ir.tries.receipts_trie.clone(),
+            storage: HashMap::from_iter(ir.tries.storage_tries.iter().cloned()),
         })
         .unwrap_or_else(|| {
             // No starting tries to work with, so we will have tries that are 100% hashed
@@ -550,12 +560,6 @@ pub async fn gather_witness(
                 storage: HashMap::default(),
             }
         });
-
-    tracing::debug!(
-        "txns_trie for dummies = {:?}, y su hash = {:?}",
-        initial_tries_for_dummies.txn,
-        initial_tries_for_dummies.txn.hash()
-    );
 
     let initial_extra_data = ExtraBlockData {
         checkpoint_state_trie_root: prev_block.state_root,
@@ -588,12 +592,6 @@ pub async fn gather_witness(
         &initial_tries_for_dummies,
         &final_tries,
         !wds.is_empty(),
-    );
-
-    tracing::debug!(
-        "txns_trie sin mayo = {:?}, y su hash = {:?}",
-        proof_gen_ir[0].tries.transactions_trie,
-        proof_gen_ir[0].tries.transactions_trie.hash()
     );
 
     add_withdrawals_to_txns(

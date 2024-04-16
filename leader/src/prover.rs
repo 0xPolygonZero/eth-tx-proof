@@ -26,12 +26,26 @@ impl ProverInput {
 
         use mpt_trie::partial_trie::PartialTrie;
         tracing::debug!(
-            "txn tries un hashes = {:#?}",
+            "txn tries un hashed = {:#?}",
             self.proof_gen_ir
                 .iter()
+                .take(2)
                 .map(|inputs| (
+                    inputs.txn_number_before,
                     inputs.tries.transactions_trie.clone(),
                     inputs.tries.transactions_trie.hash()
+                ))
+                .collect::<Vec<_>>()
+        );
+        tracing::debug!(
+            "receipt tries un hashed = {:#?}",
+            self.proof_gen_ir
+                .iter()
+                .take(2)
+                .map(|inputs| (
+                    inputs.txn_number_before,
+                    inputs.tries.receipts_trie.clone(),
+                    inputs.tries.receipts_trie.hash()
                 ))
                 .collect::<Vec<_>>()
         );
