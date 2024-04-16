@@ -118,9 +118,9 @@ impl Mpt {
                     }
                     .into()
                 }
-                _ => panic!("wtf?"),
+                _ => panic!("wtf1?"),
             },
-            _ => panic!("wtf?"),
+            _ => panic!("wtf2?"),
         }
     }
 }
@@ -134,19 +134,19 @@ pub fn insert_mpt(mpt: &mut Mpt, proof: Vec<Bytes>) {
 
 fn insert_mpt_helper(mpt: &mut Mpt, rlp_node: Bytes) {
     let a = rlp::decode_list::<Vec<u8>>(&rlp_node);
-    if a.len() < 2 {
-        panic!("All nodes are encodings of a list of size > 2")
-    }
-    let prefix = a[0].clone();
+    // assert!(a.len() < 2, "All nodes are encodings of a list of size > 1");
+    tracing::debug!("a = {:?}, a.len() = {:?}", a, a.len());
 
     mpt.mpt.insert(
         H256(keccak_if_long_enough(&rlp_node)),
         MptNode(rlp_node.to_vec()),
     );
+
     if a.len() == 2 {
         let prefix = a[0].clone();
         let is_leaf = (prefix[0] >> 4 == 2) || (prefix[0] >> 4 == 3);
         let mut nibbles = nibbles_from_hex_prefix_encoding(&prefix);
+        tracing::debug!("LosNibbles = {:?}", nibbles);
         loop {
             let node = rlp::encode_list::<Vec<u8>, _>(&[
                 nibbles.to_hex_prefix_encoding(is_leaf).to_vec(),
@@ -177,7 +177,7 @@ fn nibbles_from_hex_prefix_encoding(b: &[u8]) -> Nibbles {
             }
             // Nibbles::from_bytes_be(&b).unwrap()
         }
-        _ => panic!("wtf?"),
+        _ => panic!("wtf5?"),
     }
 }
 
@@ -192,7 +192,7 @@ pub fn apply_diffs(
     {
         diff
     } else {
-        panic!("wtf?");
+        panic!("wtf6?");
     };
 
     let empty_node = HashedPartialTrie::from(Node::Empty);

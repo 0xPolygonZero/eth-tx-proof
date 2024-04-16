@@ -218,7 +218,9 @@ pub async fn gather_witness(
             proof.len(),
             H160(BEACON_ROOTS_ADDRESS.1)
         );
+        tracing::debug!("la root = {:?}", state_mpt.root);
         insert_mpt(&mut state_mpt, proof);
+        tracing::debug!("la root = {:?}", state_mpt.root);
         tracing::debug!("state_mpt after beacon insert = {:#?}", state_mpt);
 
         let mut beacon_root_storage_mpt = Mpt::new();
@@ -246,7 +248,7 @@ pub async fn gather_witness(
         {
             accounts.0
         } else {
-            panic!("wtf?");
+            panic!("wtf3?");
         };
         traces.push(accounts.clone());
         for (address, account) in accounts {
@@ -324,7 +326,7 @@ pub async fn gather_witness(
             {
                 diff
             } else {
-                panic!("wtf?");
+                panic!("wtf4?");
             };
 
         let DiffMode { pre, post } = diff;
