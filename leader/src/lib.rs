@@ -395,7 +395,11 @@ pub async fn gather_witness(
     let mut state_mpt = state_mpt.to_partial_trie();
     let mut txns_mpt = HashedPartialTrie::from(Node::Empty);
     let mut receipts_mpt = HashedPartialTrie::from(Node::Empty);
-    tracing::info!("txns_mpt = {:?}, hash = {:?}", txns_mpt, txns_mpt.hash());
+    tracing::info!(
+        "txns_mpt = {:?}, hash = {:?}",
+        serde_json::to_string(&txns_mpt).unwrap(),
+        txns_mpt.hash()
+    );
     tracing::info!(
         "receipts_mpt = {:?}, hash = {:?}",
         receipts_mpt,
@@ -516,13 +520,8 @@ pub async fn gather_witness(
         if inputs.txn_number_before < 2.into() {
             tracing::info!(
                 "txns_mpt before = {:?}, hash = {:?}",
-                txns_mpt,
-                txns_mpt.hash()
-            );
-            tracing::info!(
-                "receipts_mpt after = {:?}, hash = {:?}",
-                receipts_mpt,
-                receipts_mpt.hash()
+                serde_json::to_string(&inputs.tries.transactions_trie).unwrap(),
+                inputs.tries.transactions_trie.hash()
             );
         }
 
@@ -567,10 +566,10 @@ pub async fn gather_witness(
     };
 
     let mut final_tries = PartialTrieState {
-        state: state_mpt,
-        storage: storage_mpts,
-        txn: txns_mpt,
-        receipt: receipts_mpt,
+        state: state_mpt.clone(),
+        storage: storage_mpts.clone(),
+        txn: txns_mpt.clone(),
+        receipt: receipts_mpt.clone(),
     };
 
     let final_extra_data = proof_gen_ir
@@ -584,6 +583,11 @@ pub async fn gather_witness(
         })
         .unwrap_or_else(|| initial_extra_data.clone());
 
+    println!(
+        "{:?}\nvs\n{:?}",
+        proof_gen_ir[0].tries.transactions_trie.hash(),
+        proof_gen_ir[1].tries.transactions_trie.hash()
+    );
     let dummies_added = pad_gen_inputs_with_dummy_inputs_if_needed(
         &mut proof_gen_ir,
         &b_data,
@@ -594,6 +598,11 @@ pub async fn gather_witness(
         !wds.is_empty(),
     );
 
+    println!(
+        "AFTER PADDING:\n{:?}\nvs\n{:?}",
+        proof_gen_ir[0].tries.transactions_trie.hash(),
+        proof_gen_ir[1].tries.transactions_trie.hash()
+    );
     add_withdrawals_to_txns(
         &mut proof_gen_ir,
         &b_data,
@@ -603,6 +612,11 @@ pub async fn gather_witness(
         dummies_added,
     );
 
+    println!(
+        "AFTER WITHDRAWALS:\n{:?}\nvs\n{:?}",
+        proof_gen_ir[0].tries.transactions_trie.hash(),
+        proof_gen_ir[1].tries.transactions_trie.hash()
+    );
     tracing::debug!(
         "txns_trie con mayo = {:?}, y su hash = {:?}",
         proof_gen_ir[0].tries.transactions_trie,
