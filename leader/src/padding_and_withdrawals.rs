@@ -16,7 +16,7 @@ use mpt_trie::partial_trie::PartialTrie;
 use mpt_trie::{
     nibbles::Nibbles, partial_trie::HashedPartialTrie, trie_subsets::create_trie_subset,
 };
-use trace_decoder::types::{HashedAccountAddr, HashedNodeAddr, TxnProofGenIR};
+use trace_decoder::types::{HashedAccountAddr, HashedNodeAddr};
 
 use crate::{utils::keccak, PartialTrieState};
 
@@ -39,7 +39,7 @@ pub(crate) struct BlockMetaAndHashes {
 /// `[add_withdrawals_to_txns]`), where the final one will mutate the
 /// state trie.
 pub(crate) fn pad_gen_inputs_with_dummy_inputs_if_needed(
-    gen_inputs: &mut Vec<TxnProofGenIR>,
+    gen_inputs: &mut Vec<GenerationInputs>,
     other_data: &BlockMetaAndHashes,
     final_extra_data: &ExtraBlockData,
     initial_extra_data: &ExtraBlockData,
@@ -94,7 +94,7 @@ pub(crate) fn pad_gen_inputs_with_dummy_inputs_if_needed(
 /// - If no dummy proofs are already present, then a dummy proof that just
 ///   contains the withdrawals is appended to the end of the IR vec.
 pub(crate) fn add_withdrawals_to_txns(
-    txn_ir: &mut Vec<TxnProofGenIR>,
+    txn_ir: &mut Vec<GenerationInputs>,
     other_data: &BlockMetaAndHashes,
     final_extra_data: &ExtraBlockData,
     final_trie_state: &mut PartialTrieState,

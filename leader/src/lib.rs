@@ -23,7 +23,7 @@ use padding_and_withdrawals::{
     add_withdrawals_to_txns, pad_gen_inputs_with_dummy_inputs_if_needed, BlockMetaAndHashes,
 };
 use rpc::{CliqueGetSignersAtHashResponse, EthChainIdResponse};
-use trace_decoder::types::{HashedAccountAddr, TrieRootHash, TxnProofGenIR};
+use trace_decoder::types::{HashedAccountAddr, TrieRootHash};
 
 use crate::utils::{has_storage_deletion, keccak};
 use crate::{
@@ -159,7 +159,7 @@ pub async fn gather_witness(
     tx: TxHash,
     provider: &Provider<Http>,
     request_miner_from_clique: bool,
-) -> Result<Vec<TxnProofGenIR>> {
+) -> Result<Vec<GenerationInputs>> {
     let tx = provider
         .get_transaction(tx)
         .await?
