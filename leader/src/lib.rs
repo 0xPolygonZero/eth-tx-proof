@@ -219,9 +219,36 @@ pub async fn gather_witness(
             H160(BEACON_ROOTS_ADDRESS.1)
         );
         tracing::debug!("la root = {:?}", state_mpt.root);
+        tracing::debug!("leaf = {:?}", proof.last());
+        let bytes: Bytes = keccak(BEACON_ROOTS_ADDRESS.1).into();
+        tracing::debug!("h(beacon_roots) = {:?}", bytes);
+        let bytes: Bytes = keccak(proof.last().unwrap()).into();
+        tracing::debug!(
+            "leaf hash = {:?} bytes = {:?}",
+            keccak(proof.last().unwrap()),
+            bytes
+        );
+        let mut proofs = proof.iter().rev();
+        if let Some(leaf) = proofs.next() {
+            let mut hash = keccak(leaf);
+            let mut path: Vec<usize> = vec![];
+            for proof in proofs {
+                let list: Vec<Vec<u8>> = rlp::decode_list(proof);
+                tracing::debug!("list = {:?}, list.len() = {:?}", list, list.len());
+                let (nibble, _) = list
+                    .iter()
+                    .enumerate()
+                    .filter(|&(_, children)| *children == hash)
+                    .next()
+                    .expect(&format!("Hash {:?} not found", hash));
+                path.push(nibble);
+                hash = keccak(proof);
+            }
+            tracing::debug!("path = {:?}", path);
+        }
+
         insert_mpt(&mut state_mpt, proof);
-        tracing::debug!("la root = {:?}", state_mpt.root);
-        tracing::debug!("state_mpt after beacon insert = {:#?}", state_mpt);
+        tracing::debug!("state_mpt after beacon insert = {:?}", state_mpt);
 
         let mut beacon_root_storage_mpt = Mpt::new();
         beacon_root_storage_mpt.root = storage_hash;

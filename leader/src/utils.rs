@@ -10,7 +10,6 @@ pub fn keccak_if_long_enough<T: AsRef<[u8]> + Clone>(bytes: T) -> [u8; 32] {
         true => {
             let mut padded_bytes: [u8; 32] = Default::default();
             padded_bytes[32 - bytes.as_ref().len()..].copy_from_slice(bytes.as_ref());
-            tracing::debug!("Uno chiquichico = {:?}", padded_bytes);
             padded_bytes
         }
 

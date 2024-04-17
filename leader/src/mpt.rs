@@ -135,7 +135,6 @@ pub fn insert_mpt(mpt: &mut Mpt, proof: Vec<Bytes>) {
 fn insert_mpt_helper(mpt: &mut Mpt, rlp_node: Bytes) {
     let a = rlp::decode_list::<Vec<u8>>(&rlp_node);
     // assert!(a.len() < 2, "All nodes are encodings of a list of size > 1");
-    tracing::debug!("a = {:?}, a.len() = {:?}", a, a.len());
 
     mpt.mpt.insert(
         H256(keccak_if_long_enough(&rlp_node)),
@@ -146,12 +145,13 @@ fn insert_mpt_helper(mpt: &mut Mpt, rlp_node: Bytes) {
         let prefix = a[0].clone();
         let is_leaf = (prefix[0] >> 4 == 2) || (prefix[0] >> 4 == 3);
         let mut nibbles = nibbles_from_hex_prefix_encoding(&prefix);
-        tracing::debug!("LosNibbles = {:?}", nibbles);
+        tracing::debug!("nibbles = {:?}", nibbles);
         loop {
             let node = rlp::encode_list::<Vec<u8>, _>(&[
                 nibbles.to_hex_prefix_encoding(is_leaf).to_vec(),
                 a[1].clone(),
             ]);
+            // TODO: This means we are inserting the node at all the prefixes?
             mpt.mpt
                 .insert(H256(keccak_if_long_enough(&node)), MptNode(node.to_vec()));
             if nibbles.is_empty() {
