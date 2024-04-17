@@ -519,7 +519,7 @@ pub async fn gather_witness(
         })
         .unwrap_or_else(|| initial_extra_data.clone());
 
-    let dummies_added = pad_gen_inputs_with_dummy_inputs_if_needed(
+    pad_gen_inputs_with_dummy_inputs_if_needed(
         &mut proof_gen_ir,
         &b_data,
         &final_extra_data,
@@ -529,14 +529,7 @@ pub async fn gather_witness(
         !wds.is_empty(),
     );
 
-    add_withdrawals_to_txns(
-        &mut proof_gen_ir,
-        &b_data,
-        &final_extra_data,
-        &mut final_tries,
-        wds,
-        dummies_added,
-    );
+    add_withdrawals_to_txns(&mut proof_gen_ir, &mut final_tries, wds);
 
     Ok(proof_gen_ir)
 }
