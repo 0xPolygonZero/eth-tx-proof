@@ -1,4 +1,5 @@
 use anyhow::Result;
+use evm_arithmetization::GenerationInputs;
 use futures::TryStreamExt;
 use ops::TxProof;
 use paladin::{
@@ -7,12 +8,11 @@ use paladin::{
 };
 use proof_gen::{proof_types::GeneratedBlockProof, types::PlonkyProofIntern};
 use serde::{Deserialize, Serialize};
-use trace_decoder::types::TxnProofGenIR;
 use tracing::info;
 
 #[derive(Debug, Deserialize, Serialize)]
 pub struct ProverInput {
-    pub proof_gen_ir: Vec<TxnProofGenIR>,
+    pub proof_gen_ir: Vec<GenerationInputs>,
 }
 
 impl ProverInput {
@@ -25,16 +25,6 @@ impl ProverInput {
         tracing::info!("Generating witness for block {:?}", b_number);
 
         use mpt_trie::partial_trie::PartialTrie;
-        tracing::debug!(
-            "txn tries un hashes = {:#?}",
-            self.proof_gen_ir
-                .iter()
-                .map(|inputs| (
-                    inputs.tries.transactions_trie.clone(),
-                    inputs.tries.transactions_trie.hash()
-                ))
-                .collect::<Vec<_>>()
-        );
 
         IndexedStream::from(self.proof_gen_ir)
             .map(&TxProof)
