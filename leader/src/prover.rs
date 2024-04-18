@@ -1,4 +1,5 @@
 use anyhow::{bail, Result};
+use evm_arithmetization::GenerationInputs;
 use ops::{AggProof, BlockProof, TxProof};
 use paladin::{
     directive::{Directive, IndexedStream, Literal},
@@ -9,11 +10,10 @@ use proof_gen::{
     types::PlonkyProofIntern,
 };
 use serde::{Deserialize, Serialize};
-use trace_decoder::types::TxnProofGenIR;
 
 #[derive(Debug, Deserialize, Serialize)]
 pub struct ProverInput {
-    pub proof_gen_ir: Vec<TxnProofGenIR>,
+    pub proof_gen_ir: Vec<GenerationInputs>,
 }
 
 impl ProverInput {

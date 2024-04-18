@@ -1,7 +1,4 @@
-use std::{
-    collections::HashMap,
-    iter::{self, empty},
-};
+use std::{collections::HashMap, iter::empty};
 
 use ethers::{
     types::{Address, H256, U256},
@@ -16,7 +13,7 @@ use mpt_trie::partial_trie::PartialTrie;
 use mpt_trie::{
     nibbles::Nibbles, partial_trie::HashedPartialTrie, trie_subsets::create_trie_subset,
 };
-use trace_decoder::types::{HashedAccountAddr, HashedNodeAddr, TxnProofGenIR};
+use trace_decoder::types::HashedAccountAddr;
 
 use crate::{utils::keccak, PartialTrieState};
 
@@ -39,14 +36,14 @@ pub(crate) struct BlockMetaAndHashes {
 /// `[add_withdrawals_to_txns]`), where the final one will mutate the
 /// state trie.
 pub(crate) fn pad_gen_inputs_with_dummy_inputs_if_needed(
-    gen_inputs: &mut Vec<TxnProofGenIR>,
+    gen_inputs: &mut Vec<GenerationInputs>,
     other_data: &BlockMetaAndHashes,
     final_extra_data: &ExtraBlockData,
     initial_extra_data: &ExtraBlockData,
     initial_tries: &PartialTrieState,
     final_tries: &PartialTrieState,
     has_withdrawals: bool,
-) -> bool {
+) {
     match gen_inputs.len() {
         0 => {
             debug_assert!(initial_tries.state == final_tries.state);
@@ -57,8 +54,6 @@ pub(crate) fn pad_gen_inputs_with_dummy_inputs_if_needed(
                 final_extra_data,
                 initial_tries,
             ));
-
-            true
         }
         1 => {
             // We just need one dummy entry.
@@ -79,10 +74,8 @@ pub(crate) fn pad_gen_inputs_with_dummy_inputs_if_needed(
                     gen_inputs.push(dummy_txn)
                 }
             };
-
-            true
         }
-        _ => false,
+        _ => (),
     }
 }
 
@@ -94,12 +87,9 @@ pub(crate) fn pad_gen_inputs_with_dummy_inputs_if_needed(
 /// - If no dummy proofs are already present, then a dummy proof that just
 ///   contains the withdrawals is appended to the end of the IR vec.
 pub(crate) fn add_withdrawals_to_txns(
-    txn_ir: &mut Vec<TxnProofGenIR>,
-    other_data: &BlockMetaAndHashes,
-    final_extra_data: &ExtraBlockData,
+    txn_ir: &mut [GenerationInputs],
     final_trie_state: &mut PartialTrieState,
     withdrawals: Vec<(Address, U256)>,
-    dummies_already_added: bool,
 ) {
     if withdrawals.is_empty() {
         return;
@@ -109,50 +99,17 @@ pub(crate) fn add_withdrawals_to_txns(
         .iter()
         .map(|(addr, v)| (*addr, hash(addr.as_bytes()), *v));
 
-    match dummies_already_added {
-        // If we have no actual dummy proofs, then we create one and append it to the
-        // end of the block.
-        false => {
-            let withdrawals_with_hashed_addrs: Vec<_> =
-                withdrawals_with_hashed_addrs_iter.collect();
+    update_trie_state_from_withdrawals(
+        withdrawals_with_hashed_addrs_iter,
+        &mut final_trie_state.state,
+    );
 
-            // Dummy state will be the state after the final txn. Also need to include the
-            // account nodes that were accessed by the withdrawals.
-            let withdrawal_addrs = withdrawals_with_hashed_addrs
-                .iter()
-                .cloned()
-                .map(|(_, h_addr, _)| h_addr);
-            let mut withdrawal_dummy = create_dummy_gen_input_with_state_addrs_accessed(
-                other_data,
-                final_extra_data,
-                final_trie_state,
-                withdrawal_addrs,
-            );
+    let last_inputs = txn_ir
+        .last_mut()
+        .expect("We cannot have an empty list of payloads.");
 
-            update_trie_state_from_withdrawals(
-                withdrawals_with_hashed_addrs,
-                &mut final_trie_state.state,
-            );
-
-            withdrawal_dummy.withdrawals = withdrawals;
-
-            // Only the state root hash needs to be updated from the withdrawals.
-            withdrawal_dummy.trie_roots_after.state_root = final_trie_state.state.hash();
-
-            txn_ir.push(withdrawal_dummy);
-        }
-        true => {
-            update_trie_state_from_withdrawals(
-                withdrawals_with_hashed_addrs_iter,
-                &mut final_trie_state.state,
-            );
-
-            // If we have dummy proofs (note: `txn_ir[1]` is always a dummy txn in this
-            // case), then this dummy will get the withdrawals.
-            txn_ir[1].withdrawals = withdrawals;
-            txn_ir[1].trie_roots_after.state_root = final_trie_state.state.hash();
-        }
-    }
+    last_inputs.withdrawals = withdrawals;
+    last_inputs.trie_roots_after.state_root = final_trie_state.state.hash();
 }
 
 /// Withdrawals update balances in the account trie, so we need to update
@@ -196,23 +153,6 @@ fn create_dummy_gen_input(
         tries,
         create_fully_hashed_out_sub_partial_trie(&tries.state),
     );
-    create_dummy_gen_input_common(other_data, extra_data, sub_tries)
-}
-
-fn create_dummy_gen_input_with_state_addrs_accessed(
-    other_data: &BlockMetaAndHashes,
-    extra_data: &ExtraBlockData,
-    tries: &PartialTrieState,
-    withdrawal_account_addrs_accessed: impl Iterator<Item = HashedAccountAddr>,
-) -> GenerationInputs {
-    let state_trie_hashed_for_withdrawals = create_minimal_state_partial_trie(
-        &tries.state,
-        withdrawal_account_addrs_accessed,
-        iter::empty(),
-    );
-
-    let sub_tries = create_dummy_proof_trie_inputs(tries, state_trie_hashed_for_withdrawals);
-
     create_dummy_gen_input_common(other_data, extra_data, sub_tries)
 }
 
@@ -277,20 +217,6 @@ fn create_dummy_proof_trie_inputs(
         ),
         storage_tries: partial_sub_storage_tries,
     }
-}
-
-fn create_minimal_state_partial_trie(
-    state_trie: &HashedPartialTrie,
-    state_accesses: impl Iterator<Item = HashedNodeAddr>,
-    additional_state_trie_paths_to_not_hash: impl Iterator<Item = Nibbles>,
-) -> HashedPartialTrie {
-    let accesses = state_accesses
-        .into_iter()
-        .map(Nibbles::from_h256_be)
-        .chain(additional_state_trie_paths_to_not_hash);
-
-    create_trie_subset(state_trie, accesses)
-        .expect("Encountered a hash node when creating a subset of the state trie")
 }
 
 // We really want to get a trie with just a hash node here, and this is an easy

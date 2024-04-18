@@ -23,7 +23,7 @@ use padding_and_withdrawals::{
     add_withdrawals_to_txns, pad_gen_inputs_with_dummy_inputs_if_needed, BlockMetaAndHashes,
 };
 use rpc::{CliqueGetSignersAtHashResponse, EthChainIdResponse};
-use trace_decoder::types::{HashedAccountAddr, TrieRootHash, TxnProofGenIR};
+use trace_decoder::types::{HashedAccountAddr, TrieRootHash};
 
 use crate::utils::{has_storage_deletion, keccak};
 use crate::{
@@ -159,7 +159,7 @@ pub async fn gather_witness(
     tx: TxHash,
     provider: &Provider<Http>,
     request_miner_from_clique: bool,
-) -> Result<Vec<TxnProofGenIR>> {
+) -> Result<Vec<GenerationInputs>> {
     let tx = provider
         .get_transaction(tx)
         .await?
@@ -519,7 +519,7 @@ pub async fn gather_witness(
         })
         .unwrap_or_else(|| initial_extra_data.clone());
 
-    let dummies_added = pad_gen_inputs_with_dummy_inputs_if_needed(
+    pad_gen_inputs_with_dummy_inputs_if_needed(
         &mut proof_gen_ir,
         &b_data,
         &final_extra_data,
@@ -529,14 +529,7 @@ pub async fn gather_witness(
         !wds.is_empty(),
     );
 
-    add_withdrawals_to_txns(
-        &mut proof_gen_ir,
-        &b_data,
-        &final_extra_data,
-        &mut final_tries,
-        wds,
-        dummies_added,
-    );
+    add_withdrawals_to_txns(&mut proof_gen_ir, &mut final_tries, wds);
 
     Ok(proof_gen_ir)
 }

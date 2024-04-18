@@ -1,5 +1,6 @@
 use common::prover_state::P_STATE;
 use ethers::types::Transaction;
+use evm_arithmetization::GenerationInputs;
 use paladin::{
     operation::{FatalError, Monoid, Operation, Result},
     registry, RemoteExecute,
@@ -10,7 +11,6 @@ use proof_gen::{
     prover_state::ProverState,
 };
 use serde::{Deserialize, Serialize};
-use trace_decoder::types::TxnProofGenIR;
 use tracing::{info_span, Level};
 
 fn p_state() -> &'static ProverState {
@@ -23,7 +23,7 @@ registry!();
 pub struct TxProof;
 
 impl Operation for TxProof {
-    type Input = TxnProofGenIR;
+    type Input = GenerationInputs;
     type Output = AggregatableProof;
 
     fn execute(&self, input: Self::Input) -> Result<Self::Output> {

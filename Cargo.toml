@@ -8,13 +8,13 @@ resolver = "2"
 ethers = "2.0.7"
 tokio = { version = "1", features = ["full"] }
 anyhow = "1.0.71"
-plonky2 = "0.2.1"
+plonky2 = "0.2.2"
 evm_arithmetization = { git = "https://github.com/0xPolygonZero/zk_evm.git", branch = "develop" }
 clap = { version = "4.4.11", features = ["derive", "env"] }
 trace_decoder = { git = "https://github.com/0xPolygonZero/zk_evm.git", branch = "develop" }
 proof_gen = { git = "https://github.com/0xPolygonZero/zk_evm.git", branch = "develop" }
 dotenvy = "0.15.7"
-paladin-core = "0.4.1"
+paladin-core = "0.4.2"
 serde = { version = "1.0.193", features = ["derive"] }
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }

@@ -4,7 +4,7 @@ use std::sync::Arc;
 use ethers::prelude::*;
 use ethers::utils::rlp;
 use evm_arithmetization::generation::mpt::AccountRlp;
-use mpt_trie::nibbles::Nibbles;
+use mpt_trie::nibbles::{Nibbles, NibblesIntern};
 use mpt_trie::partial_trie::PartialTrie;
 use mpt_trie::partial_trie::{HashedPartialTrie, Node};
 use mpt_trie::trie_subsets::create_trie_subset;
@@ -88,7 +88,7 @@ impl Mpt {
                     } else {
                         Nibbles {
                             count: 0,
-                            packed: U512::zero(),
+                            packed: NibblesIntern::zero(),
                         }
                     };
                     ext_prefix.push_nibble_front(b);
@@ -165,7 +165,7 @@ fn nibbles_from_hex_prefix_encoding(b: &[u8]) -> Nibbles {
             Nibbles {
                 count: 2 * b.len() - 1,
                 // packed: U512::from_bytes_be(&bs).unwrap(),
-                packed: U512::from_big_endian(&b),
+                packed: NibblesIntern::from_big_endian(&b),
             }
             // Nibbles::from_bytes_be(&b).unwrap()
         }
