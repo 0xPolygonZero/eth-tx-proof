@@ -75,6 +75,15 @@ pub async fn get_proof(
     ))
 }
 
+pub async fn get_account(
+    address: Address,
+    provider: &Provider<Http>,
+) -> Result<AccountState, ProviderError> {
+    let account = provider.request("eth_getAccount", address);
+    let account = account.await;
+    account
+}
+
 /// Tracing options for the debug_traceTransaction call.
 fn tracing_options() -> GethDebugTracingOptions {
     GethDebugTracingOptions {
@@ -219,7 +228,7 @@ pub async fn gather_witness(
             H160(BEACON_ROOTS_ADDRESS.1)
         );
         tracing::debug!("la root = {:?}", state_mpt.root);
-        tracing::debug!("leaf = {:?}", proof.last());
+        tracing::debug!("storage_hash = {:?}", storage_hash);
         let bytes: Bytes = keccak(BEACON_ROOTS_ADDRESS.1).into();
         tracing::debug!("h(beacon_roots) = {:?}", bytes);
         let bytes: Bytes = keccak(proof.last().unwrap()).into();
@@ -420,6 +429,7 @@ pub async fn gather_witness(
     .await?;
 
     let mut state_mpt = state_mpt.to_partial_trie();
+    tracing::debug!("state_mpt after to_partial_trie = {:#?}", state_mpt);
     let mut txns_mpt = HashedPartialTrie::from(Node::Empty);
     tracing::debug!("txns_mpt = {:?}, hash = {:?}", txns_mpt, txns_mpt.hash());
     let mut receipts_mpt = HashedPartialTrie::from(Node::Empty);
@@ -475,6 +485,8 @@ pub async fn gather_witness(
             touched.clone(),
             has_storage_deletion,
         );
+        tracing::debug!("trimmed_state_mpt = {:#?}", trimmed_state_mpt);
+        tracing::debug!("touched = {:#?}", touched);
         assert_eq!(trimmed_state_mpt.hash(), state_mpt.hash());
         let receipt = provider.get_transaction_receipt(tx.hash).await?.unwrap();
         let mut new_bloom = bloom;
@@ -632,11 +644,6 @@ pub async fn gather_witness(
         dummies_added,
     );
 
-    tracing::debug!(
-        "txns_trie con mayo = {:?}, y su hash = {:?}",
-        proof_gen_ir[0].tries.transactions_trie,
-        proof_gen_ir[0].tries.transactions_trie.hash()
-    );
     Ok(proof_gen_ir)
 }
 

@@ -43,6 +43,7 @@ async fn main() -> Result<()> {
                 format!("{:?}.json", gen_inputs[0].block_metadata.block_number),
                 &serde_json::to_vec(&gen_inputs)?,
             )?;
+            tracing::debug!("the state trie = {:#?}", gen_inputs[0].tries.state_trie);
         }
         Command::Prove {
             input_witness,

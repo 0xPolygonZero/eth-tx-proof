@@ -4,6 +4,7 @@ use std::sync::Arc;
 use ethers::prelude::*;
 use ethers::utils::rlp;
 use evm_arithmetization::generation::mpt::AccountRlp;
+use evm_arithmetization::testing_utils::{BEACON_ROOTS_ADDRESS, HISTORY_BUFFER_LENGTH};
 use mpt_trie::nibbles::{Nibbles, NibblesIntern};
 use mpt_trie::partial_trie::PartialTrie;
 use mpt_trie::partial_trie::{HashedPartialTrie, Node};
@@ -26,6 +27,11 @@ const EMPTY_TRIE_HASH: H256 = H256([
     108, 173, 192, 1, 98, 47, 181, 227, 99, 180, 33,
 ]);
 
+/// Contains addresses not necessarily touched by txs, but always touched by the
+/// kernel.
+static ALWAYS_TOUCHED_ADDRESSES: Lazy<[Nibbles; 1]> =
+    Lazy::new(|| [Nibbles::from_bytes_be(&keccak(H160(BEACON_ROOTS_ADDRESS.1).0)).unwrap()]);
+
 impl Mpt {
     pub fn new() -> Self {
         Self {
@@ -46,8 +52,10 @@ impl Mpt {
     fn to_partial_trie_helper(&self, root: H256) -> HashedPartialTrie {
         let node = self.mpt.get(&root);
         let data = if let Some(mpt_node) = node {
+            tracing::debug!("added node {:?}", root);
             mpt_node.0.clone()
         } else {
+            tracing::debug!("hash node found");
             return Node::Hash(root).into();
         };
         let a = rlp::decode_list::<Vec<u8>>(&data);
@@ -57,13 +65,16 @@ impl Mpt {
                 let mut children = vec![];
                 for i in 0..16 {
                     if a[i].is_empty() {
+                        tracing::debug!("empty node at {i} in {:?}", root);
                         children.push(Node::Empty.into());
                         continue;
                     }
+                    tracing::debug!("non-empty node at {i} in {:?}", root);
                     children.push(Arc::new(Box::new(
                         self.to_partial_trie_helper(H256::from_slice(&a[i])),
                     )));
                 }
+                tracing::debug!("added branch node {:?}", root);
                 Node::Branch {
                     value,
                     children: children.try_into().unwrap(),
@@ -334,7 +345,8 @@ pub fn trim(
     has_storage_deletion: bool,
 ) -> (HashedPartialTrie, HashMap<H256, HashedPartialTrie>) {
     let tok = |addr: &Address| Nibbles::from_bytes_be(&keccak(addr.0)).unwrap();
-    let keys = touched.keys().map(tok).collect::<Vec<_>>();
+    let mut keys = touched.keys().map(tok).collect::<Vec<_>>();
+    keys.extend(ALWAYS_TOUCHED_ADDRESSES.iter());
     let new_state_trie = create_trie_subset(&trie, keys).unwrap();
     if has_storage_deletion {
         // TODO: This is inefficient. Replace with a smarter solution.
@@ -344,7 +356,11 @@ pub fn trim(
         .keys()
         .map(|addr| (H256(keccak(addr.0)), *addr))
         .collect::<HashMap<_, _>>();
-    for (k, t) in storage_mpts.iter_mut() {
+    let beacon_roots_key: H256 = keccak(BEACON_ROOTS_ADDRESS.1).into();
+    for (k, t) in storage_mpts
+        .iter_mut()
+        .filter(|&(&k, _)| k != beacon_roots_key)
+    {
         if !keys_to_addrs.contains_key(k) {
             *t = HashedPartialTrie::from(Node::Hash(t.hash()));
         } else {
