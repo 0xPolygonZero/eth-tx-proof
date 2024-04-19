@@ -4,6 +4,7 @@ use std::sync::Arc;
 use ethers::prelude::*;
 use ethers::utils::rlp;
 use evm_arithmetization::generation::mpt::AccountRlp;
+use evm_arithmetization::testing_utils::BEACON_ROOTS_ADDRESS;
 use mpt_trie::nibbles::{Nibbles, NibblesIntern};
 use mpt_trie::partial_trie::PartialTrie;
 use mpt_trie::partial_trie::{HashedPartialTrie, Node};
@@ -332,6 +333,7 @@ pub fn trim(
     mut storage_mpts: HashMap<H256, HashedPartialTrie>,
     touched: BTreeMap<Address, AccountState>,
     has_storage_deletion: bool,
+    first_tx: bool,
 ) -> (HashedPartialTrie, HashMap<H256, HashedPartialTrie>) {
     let tok = |addr: &Address| Nibbles::from_bytes_be(&keccak(addr.0)).unwrap();
     let keys = touched.keys().map(tok).collect::<Vec<_>>();
@@ -345,6 +347,9 @@ pub fn trim(
         .map(|addr| (H256(keccak(addr.0)), *addr))
         .collect::<HashMap<_, _>>();
     for (k, t) in storage_mpts.iter_mut() {
+        if first_tx && *k == H256(keccak(BEACON_ROOTS_ADDRESS.1)) {
+            continue;
+        }
         if !keys_to_addrs.contains_key(k) {
             *t = HashedPartialTrie::from(Node::Hash(t.hash()));
         } else {

@@ -24,8 +24,6 @@ impl ProverInput {
         let b_number = self.proof_gen_ir[0].block_metadata.block_number;
         tracing::info!("Generating witness for block {:?}", b_number);
 
-        use mpt_trie::partial_trie::PartialTrie;
-
         IndexedStream::from(self.proof_gen_ir)
             .map(&TxProof)
             .run(runtime)

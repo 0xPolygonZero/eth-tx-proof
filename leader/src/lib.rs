@@ -199,60 +199,30 @@ pub async fn gather_witness(
 
     // Beacon block roots contract
     {
-        for slot in 0..HISTORY_BUFFER_LENGTH.1 {
+        for slot in [
+            block.timestamp % HISTORY_BUFFER_LENGTH.1,
+            (block.timestamp % HISTORY_BUFFER_LENGTH.1) + HISTORY_BUFFER_LENGTH.1,
+        ] {
             let mut bytes = [0; 32];
-            U256::from(slot).to_big_endian(&mut bytes);
-            let key = keccak(bytes);
+            slot.to_big_endian(&mut bytes);
 
-            beacon_root_storage_keys.push(H256(key));
+            beacon_root_storage_keys.push(H256(bytes));
         }
-        let (proof, storage_proofs, storage_hash, _account_is_empty) = get_proof(
+        let (beacon_proof, storage_proofs, storage_hash, _account_is_empty) = get_proof(
             H160(BEACON_ROOTS_ADDRESS.1),
             beacon_root_storage_keys.clone(),
             (block_number - 1).into(),
             provider,
         )
         .await?;
-        tracing::debug!(
-            "beacon root address len = {:?} and addr = {:?}",
-            proof.len(),
-            H160(BEACON_ROOTS_ADDRESS.1)
-        );
-        tracing::debug!("la root = {:?}", state_mpt.root);
-        tracing::debug!("leaf = {:?}", proof.last());
-        let bytes: Bytes = keccak(BEACON_ROOTS_ADDRESS.1).into();
-        tracing::debug!("h(beacon_roots) = {:?}", bytes);
-        let bytes: Bytes = keccak(proof.last().unwrap()).into();
-        tracing::debug!(
-            "leaf hash = {:?} bytes = {:?}",
-            keccak(proof.last().unwrap()),
-            bytes
-        );
-        let mut proofs = proof.iter().rev();
-        if let Some(leaf) = proofs.next() {
-            let mut hash = keccak(leaf);
-            let mut path: Vec<usize> = vec![];
-            for proof in proofs {
-                let list: Vec<Vec<u8>> = rlp::decode_list(proof);
-                tracing::debug!("list = {:?}, list.len() = {:?}", list, list.len());
-                let (nibble, _) = list
-                    .iter()
-                    .enumerate()
-                    .filter(|&(_, children)| *children == hash)
-                    .next()
-                    .expect(&format!("Hash {:?} not found", hash));
-                path.push(nibble);
-                hash = keccak(proof);
-            }
-            tracing::debug!("path = {:?}", path);
-        }
 
-        insert_mpt(&mut state_mpt, proof);
+        insert_mpt(&mut state_mpt, beacon_proof);
         tracing::debug!("state_mpt after beacon insert = {:?}", state_mpt);
 
         let mut beacon_root_storage_mpt = Mpt::new();
         beacon_root_storage_mpt.root = storage_hash;
         for sp in storage_proofs {
+            tracing::info!("Slot key: {:?}, value: {:?}", sp.key, sp.value);
             insert_mpt(&mut beacon_root_storage_mpt, sp.proof);
         }
         let key = keccak(BEACON_ROOTS_ADDRESS.1);
@@ -449,6 +419,7 @@ pub async fn gather_witness(
         .take(tx_index + 1)
     {
         tracing::info!("Processing {}-th transaction: {:?}", i, tx.hash);
+        let first_tx = i == 0;
         let last_tx = i == block.transactions.len() - 1;
         let trace = provider
             .debug_trace_transaction(tx.hash, tracing_options_diff())
@@ -474,6 +445,7 @@ pub async fn gather_witness(
             storage_mpts.clone(),
             touched.clone(),
             has_storage_deletion,
+            first_tx,
         );
         assert_eq!(trimmed_state_mpt.hash(), state_mpt.hash());
         let receipt = provider.get_transaction_receipt(tx.hash).await?.unwrap();
