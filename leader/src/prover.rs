@@ -38,7 +38,7 @@ impl ProverInput {
 
             Ok(block_proof.0)
         } else {
-            bail!("AggProof is is not GeneratedAggProof")
+            bail!("AggProof is not GeneratedAggProof")
         }
     }
 }
