@@ -1,0 +1,5 @@
+{
+    "cmake.sourceDirectory": "/workspaces/eth-tx-proof/leader/src",
+    "ecl.launchConfiguration": "not found",
+    "ecl.targetCluster": {}
+}
