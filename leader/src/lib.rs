@@ -436,12 +436,38 @@ pub async fn gather_witness(
             .debug_trace_transaction(tx.hash, tracing_options_diff())
             .await?;
         let has_storage_deletion = has_storage_deletion(&trace);
-        let (next_state_mpt, next_storage_mpts) = apply_diffs(
+        let (mut next_state_mpt, mut next_storage_mpts) = apply_diffs(
             state_mpt.clone(),
             storage_mpts.clone(),
             &mut contract_codes,
             trace,
         );
+
+        // Modify the beacon roots storage trie
+        let mut beacon_roots_storage_trie =
+            next_storage_mpts.get_mut(&H256(beacon_roots_key)).unwrap();
+        let mut bytes = [0; 32];
+        let slot = block.timestamp % HISTORY_BUFFER_LENGTH.1 + HISTORY_BUFFER_LENGTH.1;
+        U256::from(slot).to_big_endian(&mut bytes);
+        let key = Nibbles::from_bytes_be(&keccak(bytes)).unwrap();
+        if let Some(parent_beacon_block_root) = block.parent_beacon_block_root {
+            beacon_roots_storage_trie.insert(key, parent_beacon_block_root.0.to_vec());
+            // let old_beacon_roots_account: AccountState = next_state_mpt
+            //     .get(Nibbles::from_bytes_be(&H256(beacon_roots_key)))
+            //     .into();
+            // let storage_accout = next_state_mpt.insert(
+            //     Nibbles::from_bytes_be(&H256(beacon_roots_key)),
+            //     AccountState {
+            //         balance: old_beacon_roots_account.balance,
+            //         code: old_beacon_roots_account.code,
+            //         nonce: old_beacon_roots_account.nonce,
+            //         storage: ,
+            //     },
+            // );
+        } else {
+            beacon_roots_storage_trie.delete(key);
+        }
+
         // For the last tx, we want to include the withdrawal addresses in the state
         // trie.
         if last_tx {
@@ -456,9 +482,8 @@ pub async fn gather_witness(
         if !touched.contains_key(&beacon_roots_address) {
             let mut beacon_roots_account = AccountState::default();
             let mut bytes = [0; 32];
-            let slot = block.timestamp % HISTORY_BUFFER_LENGTH.1 + HISTORY_BUFFER_LENGTH.1;
-            U256::from(slot).to_big_endian(&mut bytes);
             let key = keccak(bytes);
+
             beacon_roots_account.storage =
                 Some(BTreeMap::from_iter([(H256(key), H256::default())]));
             touched.insert(beacon_roots_address, beacon_roots_account);
