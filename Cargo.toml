@@ -14,7 +14,7 @@ clap = { version = "4.4.11", features = ["derive", "env"] }
 trace_decoder = { version = "0.3.0", path = "../zk_evm/trace_decoder" }
 proof_gen = { path = "../zk_evm/proof_gen" }
 dotenvy = "0.15.7"
-paladin-core = "0.4.1"
+paladin-core = "0.4.2"
 serde = { version = "1.0.193", features = ["derive"] }
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }

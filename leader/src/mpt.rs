@@ -4,7 +4,7 @@ use std::sync::Arc;
 use ethers::prelude::*;
 use ethers::utils::rlp;
 use evm_arithmetization::generation::mpt::AccountRlp;
-use evm_arithmetization::testing_utils::{BEACON_ROOTS_ADDRESS, HISTORY_BUFFER_LENGTH};
+use evm_arithmetization::testing_utils::BEACON_ROOTS_ADDRESS;
 use mpt_trie::nibbles::{Nibbles, NibblesIntern};
 use mpt_trie::partial_trie::PartialTrie;
 use mpt_trie::partial_trie::{HashedPartialTrie, Node};
@@ -26,11 +26,6 @@ const EMPTY_TRIE_HASH: H256 = H256([
     86, 232, 31, 23, 27, 204, 85, 166, 255, 131, 69, 230, 146, 192, 248, 110, 91, 72, 224, 27, 153,
     108, 173, 192, 1, 98, 47, 181, 227, 99, 180, 33,
 ]);
-
-/// Contains addresses not necessarily touched by txs, but always touched by the
-/// kernel.
-static ALWAYS_TOUCHED_ADDRESSES: Lazy<[Nibbles; 1]> =
-    Lazy::new(|| [Nibbles::from_bytes_be(&keccak(H160(BEACON_ROOTS_ADDRESS.1).0)).unwrap()]);
 
 impl Mpt {
     pub fn new() -> Self {
@@ -343,10 +338,11 @@ pub fn trim(
     mut storage_mpts: HashMap<H256, HashedPartialTrie>,
     touched: BTreeMap<Address, AccountState>,
     has_storage_deletion: bool,
+    first_tx: bool,
 ) -> (HashedPartialTrie, HashMap<H256, HashedPartialTrie>) {
     let tok = |addr: &Address| Nibbles::from_bytes_be(&keccak(addr.0)).unwrap();
     let mut keys = touched.keys().map(tok).collect::<Vec<_>>();
-    keys.extend(ALWAYS_TOUCHED_ADDRESSES.iter());
+
     let new_state_trie = create_trie_subset(&trie, keys).unwrap();
     if has_storage_deletion {
         // TODO: This is inefficient. Replace with a smarter solution.
@@ -356,11 +352,7 @@ pub fn trim(
         .keys()
         .map(|addr| (H256(keccak(addr.0)), *addr))
         .collect::<HashMap<_, _>>();
-    let beacon_roots_key: H256 = keccak(BEACON_ROOTS_ADDRESS.1).into();
-    for (k, t) in storage_mpts
-        .iter_mut()
-        .filter(|&(&k, _)| k != beacon_roots_key)
-    {
+    for (k, t) in storage_mpts.iter_mut() {
         if !keys_to_addrs.contains_key(k) {
             *t = HashedPartialTrie::from(Node::Hash(t.hash()));
         } else {

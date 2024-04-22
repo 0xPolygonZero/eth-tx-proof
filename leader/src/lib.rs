@@ -24,7 +24,7 @@ use padding_and_withdrawals::{
     add_withdrawals_to_txns, pad_gen_inputs_with_dummy_inputs_if_needed, BlockMetaAndHashes,
 };
 use rpc::{CliqueGetSignersAtHashResponse, EthChainIdResponse};
-use trace_decoder::types::{HashedAccountAddr, TrieRootHash, TxnProofGenIR};
+use trace_decoder::types::{HashedAccountAddr, TrieRootHash};
 
 use crate::utils::{has_storage_deletion, keccak};
 use crate::{
@@ -172,7 +172,7 @@ pub async fn gather_witness(
     block_number: u64,
     provider: &Provider<Http>,
     request_miner_from_clique: bool,
-) -> Result<Vec<TxnProofGenIR>> {
+) -> Result<Vec<GenerationInputs>> {
     let block = provider
         .get_block(BlockId::from(block_number))
         .await?
@@ -207,65 +207,36 @@ pub async fn gather_witness(
     let mut beacon_root_storage_keys = vec![];
 
     // Beacon block roots contract
+    let beacon_roots_address = H160(BEACON_ROOTS_ADDRESS.1);
+    let beacon_roots_key = keccak(BEACON_ROOTS_ADDRESS.1);
     {
-        for slot in 0..HISTORY_BUFFER_LENGTH.1 {
+        for slot in [
+            block.timestamp % HISTORY_BUFFER_LENGTH.1,
+            (block.timestamp % HISTORY_BUFFER_LENGTH.1) + HISTORY_BUFFER_LENGTH.1,
+        ] {
             let mut bytes = [0; 32];
-            U256::from(slot).to_big_endian(&mut bytes);
-            let key = keccak(bytes);
+            slot.to_big_endian(&mut bytes);
 
-            beacon_root_storage_keys.push(H256(key));
+            beacon_root_storage_keys.push(H256(bytes));
         }
-        let (proof, storage_proofs, storage_hash, _account_is_empty) = get_proof(
-            H160(BEACON_ROOTS_ADDRESS.1),
+        let (beacon_proof, storage_proofs, storage_hash, _account_is_empty) = get_proof(
+            beacon_roots_address,
             beacon_root_storage_keys.clone(),
             (block_number - 1).into(),
             provider,
         )
         .await?;
-        tracing::debug!(
-            "beacon root address len = {:?} and addr = {:?}",
-            proof.len(),
-            H160(BEACON_ROOTS_ADDRESS.1)
-        );
-        tracing::debug!("la root = {:?}", state_mpt.root);
-        tracing::debug!("storage_hash = {:?}", storage_hash);
-        let bytes: Bytes = keccak(BEACON_ROOTS_ADDRESS.1).into();
-        tracing::debug!("h(beacon_roots) = {:?}", bytes);
-        let bytes: Bytes = keccak(proof.last().unwrap()).into();
-        tracing::debug!(
-            "leaf hash = {:?} bytes = {:?}",
-            keccak(proof.last().unwrap()),
-            bytes
-        );
-        let mut proofs = proof.iter().rev();
-        if let Some(leaf) = proofs.next() {
-            let mut hash = keccak(leaf);
-            let mut path: Vec<usize> = vec![];
-            for proof in proofs {
-                let list: Vec<Vec<u8>> = rlp::decode_list(proof);
-                tracing::debug!("list = {:?}, list.len() = {:?}", list, list.len());
-                let (nibble, _) = list
-                    .iter()
-                    .enumerate()
-                    .filter(|&(_, children)| *children == hash)
-                    .next()
-                    .expect(&format!("Hash {:?} not found", hash));
-                path.push(nibble);
-                hash = keccak(proof);
-            }
-            tracing::debug!("path = {:?}", path);
-        }
 
-        insert_mpt(&mut state_mpt, proof);
+        insert_mpt(&mut state_mpt, beacon_proof);
         tracing::debug!("state_mpt after beacon insert = {:?}", state_mpt);
 
         let mut beacon_root_storage_mpt = Mpt::new();
         beacon_root_storage_mpt.root = storage_hash;
         for sp in storage_proofs {
+            tracing::info!("Slot key: {:?}, value: {:?}", sp.key, sp.value);
             insert_mpt(&mut beacon_root_storage_mpt, sp.proof);
         }
-        let key = keccak(BEACON_ROOTS_ADDRESS.1);
-        storage_mpts.insert(key.into(), beacon_root_storage_mpt);
+        storage_mpts.insert(beacon_roots_key.into(), beacon_root_storage_mpt);
     }
 
     for &hash in block.transactions.iter().take(tx_index + 1) {
@@ -459,6 +430,7 @@ pub async fn gather_witness(
         .take(tx_index + 1)
     {
         tracing::info!("Processing {}-th transaction: {:?}", i, tx.hash);
+        let first_tx = i == 0;
         let last_tx = i == block.transactions.len() - 1;
         let trace = provider
             .debug_trace_transaction(tx.hash, tracing_options_diff())
@@ -479,11 +451,25 @@ pub async fn gather_witness(
                 }
             }
         }
+
+        // Always add the beacon roots address with its accessed storage keys
+        if !touched.contains_key(&beacon_roots_address) {
+            let mut beacon_roots_account = AccountState::default();
+            let mut bytes = [0; 32];
+            let slot = block.timestamp % HISTORY_BUFFER_LENGTH.1 + HISTORY_BUFFER_LENGTH.1;
+            U256::from(slot).to_big_endian(&mut bytes);
+            let key = keccak(bytes);
+            beacon_roots_account.storage =
+                Some(BTreeMap::from_iter([(H256(key), H256::default())]));
+            touched.insert(beacon_roots_address, beacon_roots_account);
+        }
+
         let (trimmed_state_mpt, trimmed_storage_mpts) = trim(
             state_mpt.clone(),
             storage_mpts.clone(),
             touched.clone(),
             has_storage_deletion,
+            first_tx,
         );
         tracing::debug!("trimmed_state_mpt = {:#?}", trimmed_state_mpt);
         tracing::debug!("touched = {:#?}", touched);
@@ -619,7 +605,7 @@ pub async fn gather_witness(
         })
         .unwrap_or_else(|| initial_extra_data.clone());
 
-    let dummies_added = pad_gen_inputs_with_dummy_inputs_if_needed(
+    pad_gen_inputs_with_dummy_inputs_if_needed(
         &mut proof_gen_ir,
         &b_data,
         &final_extra_data,
@@ -635,14 +621,7 @@ pub async fn gather_witness(
         proof_gen_ir[0].tries.transactions_trie.hash()
     );
 
-    add_withdrawals_to_txns(
-        &mut proof_gen_ir,
-        &b_data,
-        &final_extra_data,
-        &mut final_tries,
-        wds,
-        dummies_added,
-    );
+    add_withdrawals_to_txns(&mut proof_gen_ir, &mut final_tries, wds);
 
     Ok(proof_gen_ir)
 }
