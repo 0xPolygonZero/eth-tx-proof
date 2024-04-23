@@ -47,10 +47,8 @@ impl Mpt {
     fn to_partial_trie_helper(&self, root: H256) -> HashedPartialTrie {
         let node = self.mpt.get(&root);
         let data = if let Some(mpt_node) = node {
-            tracing::debug!("added node {:?}", root);
             mpt_node.0.clone()
         } else {
-            tracing::debug!("hash node found");
             return Node::Hash(root).into();
         };
         let a = rlp::decode_list::<Vec<u8>>(&data);
@@ -60,16 +58,13 @@ impl Mpt {
                 let mut children = vec![];
                 for i in 0..16 {
                     if a[i].is_empty() {
-                        tracing::debug!("empty node at {i} in {:?}", root);
                         children.push(Node::Empty.into());
                         continue;
                     }
-                    tracing::debug!("non-empty node at {i} in {:?}", root);
                     children.push(Arc::new(Box::new(
                         self.to_partial_trie_helper(H256::from_slice(&a[i])),
                     )));
                 }
-                tracing::debug!("added branch node {:?}", root);
                 Node::Branch {
                     value,
                     children: children.try_into().unwrap(),
@@ -151,7 +146,6 @@ fn insert_mpt_helper(mpt: &mut Mpt, rlp_node: Bytes) {
         let prefix = a[0].clone();
         let is_leaf = (prefix[0] >> 4 == 2) || (prefix[0] >> 4 == 3);
         let mut nibbles = nibbles_from_hex_prefix_encoding(&prefix);
-        tracing::debug!("nibbles = {:?}", nibbles);
         loop {
             let node = rlp::encode_list::<Vec<u8>, _>(&[
                 nibbles.to_hex_prefix_encoding(is_leaf).to_vec(),

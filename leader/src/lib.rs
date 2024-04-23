@@ -13,6 +13,7 @@ use anyhow::{anyhow, Result};
 use ethers::prelude::*;
 use ethers::types::GethDebugTracerType;
 use ethers::utils::rlp;
+use evm_arithmetization::generation::mpt::AccountRlp;
 use evm_arithmetization::generation::{GenerationInputs, TrieInputs};
 use evm_arithmetization::proof::TrieRoots;
 use evm_arithmetization::proof::{BlockMetadata, ExtraBlockData};
@@ -228,7 +229,6 @@ pub async fn gather_witness(
         .await?;
 
         insert_mpt(&mut state_mpt, beacon_proof);
-        tracing::debug!("state_mpt after beacon insert = {:?}", state_mpt);
 
         let mut beacon_root_storage_mpt = Mpt::new();
         beacon_root_storage_mpt.root = storage_hash;
@@ -400,9 +400,7 @@ pub async fn gather_witness(
     .await?;
 
     let mut state_mpt = state_mpt.to_partial_trie();
-    tracing::debug!("state_mpt after to_partial_trie = {:#?}", state_mpt);
     let mut txns_mpt = HashedPartialTrie::from(Node::Empty);
-    tracing::debug!("txns_mpt = {:?}, hash = {:?}", txns_mpt, txns_mpt.hash());
     let mut receipts_mpt = HashedPartialTrie::from(Node::Empty);
     let mut gas_used = U256::zero();
     let mut bloom: Bloom = Bloom::zero();
@@ -452,20 +450,40 @@ pub async fn gather_witness(
         let key = Nibbles::from_bytes_be(&keccak(bytes)).unwrap();
         if let Some(parent_beacon_block_root) = block.parent_beacon_block_root {
             beacon_roots_storage_trie.insert(key, parent_beacon_block_root.0.to_vec());
-            // let old_beacon_roots_account: AccountState = next_state_mpt
-            //     .get(Nibbles::from_bytes_be(&H256(beacon_roots_key)))
-            //     .into();
-            // let storage_accout = next_state_mpt.insert(
-            //     Nibbles::from_bytes_be(&H256(beacon_roots_key)),
-            //     AccountState {
-            //         balance: old_beacon_roots_account.balance,
-            //         code: old_beacon_roots_account.code,
-            //         nonce: old_beacon_roots_account.nonce,
-            //         storage: ,
-            //     },
-            // );
+            let old_beacon_roots_account: AccountRlp = rlp::decode(
+                next_state_mpt
+                    .get(Nibbles::from_bytes_be(&beacon_roots_key).unwrap())
+                    .unwrap(),
+            )
+            .unwrap();
+            next_state_mpt.insert(
+                Nibbles::from_bytes_be(&beacon_roots_key).unwrap(),
+                rlp::encode(&AccountRlp {
+                    balance: old_beacon_roots_account.balance,
+                    nonce: old_beacon_roots_account.nonce,
+                    storage_root: beacon_roots_storage_trie.hash(),
+                    code_hash: old_beacon_roots_account.code_hash,
+                })
+                .to_vec(),
+            );
         } else {
+            let old_beacon_roots_account: AccountRlp = rlp::decode(
+                next_state_mpt
+                    .get(Nibbles::from_bytes_be(&beacon_roots_key).unwrap())
+                    .unwrap(),
+            )
+            .unwrap();
             beacon_roots_storage_trie.delete(key);
+            next_state_mpt.insert(
+                Nibbles::from_bytes_be(&beacon_roots_key).unwrap(),
+                rlp::encode(&AccountRlp {
+                    balance: old_beacon_roots_account.balance,
+                    nonce: old_beacon_roots_account.nonce,
+                    storage_root: HashedPartialTrie::default().hash(),
+                    code_hash: old_beacon_roots_account.code_hash,
+                })
+                .to_vec(),
+            );
         }
 
         // For the last tx, we want to include the withdrawal addresses in the state
@@ -496,8 +514,6 @@ pub async fn gather_witness(
             has_storage_deletion,
             first_tx,
         );
-        tracing::debug!("trimmed_state_mpt = {:#?}", trimmed_state_mpt);
-        tracing::debug!("touched = {:#?}", touched);
         assert_eq!(trimmed_state_mpt.hash(), state_mpt.hash());
         let receipt = provider.get_transaction_receipt(tx.hash).await?.unwrap();
         let mut new_bloom = bloom;
@@ -559,6 +575,8 @@ pub async fn gather_witness(
             txn_number_before: receipt.transaction_index.0[0].into(),
         };
 
+        tracing::debug!("next_state_mpt = {:#?}", next_state_mpt);
+
         state_mpt = next_state_mpt;
         storage_mpts = next_storage_mpts;
         gas_used += receipt.gas_used.unwrap();
@@ -577,18 +595,11 @@ pub async fn gather_witness(
 
     let initial_tries_for_dummies = proof_gen_ir
         .first()
-        .map(|ir| {
-            tracing::debug!(
-                "txns_trie dsad= {:#?}, hash = {:?}",
-                ir.tries.transactions_trie,
-                ir.tries.transactions_trie.hash()
-            );
-            PartialTrieState {
-                state: ir.tries.state_trie.clone(),
-                txn: ir.tries.transactions_trie.clone(),
-                receipt: ir.tries.receipts_trie.clone(),
-                storage: HashMap::from_iter(ir.tries.storage_tries.iter().cloned()),
-            }
+        .map(|ir| PartialTrieState {
+            state: ir.tries.state_trie.clone(),
+            txn: ir.tries.transactions_trie.clone(),
+            receipt: ir.tries.receipts_trie.clone(),
+            storage: HashMap::from_iter(ir.tries.storage_tries.iter().cloned()),
         })
         .unwrap_or_else(|| {
             // No starting tries to work with, so we will have tries that are 100% hashed
@@ -600,12 +611,6 @@ pub async fn gather_witness(
                 storage: HashMap::default(),
             }
         });
-
-    tracing::debug!(
-        "txns_trie for dummies = {:?}, y su hash = {:?}",
-        initial_tries_for_dummies.txn,
-        initial_tries_for_dummies.txn.hash()
-    );
 
     let initial_extra_data = ExtraBlockData {
         checkpoint_state_trie_root: prev_block.state_root,
@@ -638,12 +643,6 @@ pub async fn gather_witness(
         &initial_tries_for_dummies,
         &final_tries,
         !wds.is_empty(),
-    );
-
-    tracing::debug!(
-        "txns_trie sin mayo = {:?}, y su hash = {:?}",
-        proof_gen_ir[0].tries.transactions_trie,
-        proof_gen_ir[0].tries.transactions_trie.hash()
     );
 
     add_withdrawals_to_txns(&mut proof_gen_ir, &mut final_tries, wds);

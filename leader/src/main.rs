@@ -33,17 +33,11 @@ async fn main() -> Result<()> {
 
             let gen_inputs =
                 gather_witness(block_number, &provider, request_miner_from_clique).await?;
-            use mpt_trie::partial_trie::PartialTrie;
-            tracing::debug!(
-                "las txns = {:?}, y su hash = {:?}",
-                gen_inputs[0].tries.transactions_trie,
-                gen_inputs[0].tries.transactions_trie.hash()
-            );
+
             std::fs::write(
                 format!("{:?}.json", gen_inputs[0].block_metadata.block_number),
                 &serde_json::to_vec(&gen_inputs)?,
             )?;
-            tracing::debug!("the state trie = {:#?}", gen_inputs[0].tries.state_trie);
         }
         Command::Prove {
             input_witness,

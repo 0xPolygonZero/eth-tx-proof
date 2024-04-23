@@ -95,12 +95,6 @@ pub(crate) fn add_withdrawals_to_txns(
         return;
     }
 
-    tracing::debug!(
-        "txns_trie sin kechun = {:?}, y su hash = {:?}",
-        txn_ir[0].tries.transactions_trie,
-        txn_ir[0].tries.transactions_trie.hash()
-    );
-
     let withdrawals_with_hashed_addrs_iter = withdrawals
         .iter()
         .map(|(addr, v)| (*addr, hash(addr.as_bytes()), *v));
