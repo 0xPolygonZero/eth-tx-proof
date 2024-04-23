@@ -489,10 +489,11 @@ pub async fn gather_witness(
             }
         }
 
-        // Always add the beacon roots address with its accessed storage keys
-        if !touched.contains_key(&beacon_roots_address) {
+        // Always add the beacon roots address with its accessed storage keys for the
+        // first tx
+        if first_tx && !touched.contains_key(&beacon_roots_address) {
             let mut beacon_roots_account = AccountState::default();
-            let mut bytes = [0; 32];
+            let bytes = [0; 32];
             let key = keccak(bytes);
 
             beacon_roots_account.storage =
@@ -505,7 +506,6 @@ pub async fn gather_witness(
             storage_mpts.clone(),
             touched.clone(),
             has_storage_deletion,
-            first_tx,
         );
         assert_eq!(trimmed_state_mpt.hash(), state_mpt.hash());
         let receipt = provider.get_transaction_receipt(tx.hash).await?.unwrap();
