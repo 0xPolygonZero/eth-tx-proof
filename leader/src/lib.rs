@@ -442,56 +442,40 @@ pub async fn gather_witness(
         );
 
         // Modify the beacon roots storage trie
-        let mut beacon_roots_storage_trie =
-            next_storage_mpts.get_mut(&H256(beacon_roots_key)).unwrap();
-        let mut bytes = [0; 32];
-        let slot1 = block.timestamp % HISTORY_BUFFER_LENGTH.1 + HISTORY_BUFFER_LENGTH.1;
-        U256::from(slot1).to_big_endian(&mut bytes);
-        let key1 = Nibbles::from_bytes_be(&keccak(bytes)).unwrap();
-        let mut bytes = [0; 32];
-        let slot2 = block.timestamp % HISTORY_BUFFER_LENGTH.1;
-        U256::from(slot2).to_big_endian(&mut bytes);
-        let key2 = Nibbles::from_bytes_be(&keccak(bytes)).unwrap();
-        if let Some(parent_beacon_block_root) = block.parent_beacon_block_root {
-            tracing::debug!("with parent beacon block root");
-            beacon_roots_storage_trie.insert(key1, parent_beacon_block_root.0.to_vec());
-            beacon_roots_storage_trie.insert(key2, block.timestamp);
-            let old_beacon_roots_account: AccountRlp = rlp::decode(
+        if first_tx {
+            let beacon_roots_storage_trie =
+                next_storage_mpts.get_mut(&H256(beacon_roots_key)).unwrap();
+            let mut bytes = [0; 32];
+            let slot1 = (block.timestamp % HISTORY_BUFFER_LENGTH.1) + HISTORY_BUFFER_LENGTH.1;
+            U256::from(slot1).to_big_endian(&mut bytes);
+            let key1 = Nibbles::from_bytes_be(&keccak(bytes)).unwrap();
+            let mut bytes = [0; 32];
+            let slot2 = block.timestamp % HISTORY_BUFFER_LENGTH.1;
+            U256::from(slot2).to_big_endian(&mut bytes);
+            let key2 = Nibbles::from_bytes_be(&keccak(bytes)).unwrap();
+
+            let parent_beacon_block_root = block.parent_beacon_block_root.unwrap();
+
+            beacon_roots_storage_trie.insert(
+                key1,
+                rlp::encode(&U256::from_big_endian(&parent_beacon_block_root.0))
+                    .freeze()
+                    .to_vec(),
+            )?;
+            beacon_roots_storage_trie
+                .insert(key2, rlp::encode(&block.timestamp).freeze().to_vec())?;
+            let mut beacon_roots_account: AccountRlp = rlp::decode(
                 next_state_mpt
                     .get(Nibbles::from_bytes_be(&beacon_roots_key).unwrap())
                     .unwrap(),
             )
             .unwrap();
+
+            beacon_roots_account.storage_root = beacon_roots_storage_trie.hash();
             next_state_mpt.insert(
                 Nibbles::from_bytes_be(&beacon_roots_key).unwrap(),
-                rlp::encode(&AccountRlp {
-                    balance: old_beacon_roots_account.balance,
-                    nonce: old_beacon_roots_account.nonce,
-                    storage_root: beacon_roots_storage_trie.hash(),
-                    code_hash: old_beacon_roots_account.code_hash,
-                })
-                .to_vec(),
-            );
-        } else {
-            tracing::debug!("without parent beacon block root");
-            let old_beacon_roots_account: AccountRlp = rlp::decode(
-                next_state_mpt
-                    .get(Nibbles::from_bytes_be(&beacon_roots_key).unwrap())
-                    .unwrap(),
-            )
-            .unwrap();
-            beacon_roots_storage_trie.delete(key1);
-            beacon_roots_storage_trie.delete(key2);
-            next_state_mpt.insert(
-                Nibbles::from_bytes_be(&beacon_roots_key).unwrap(),
-                rlp::encode(&AccountRlp {
-                    balance: old_beacon_roots_account.balance,
-                    nonce: old_beacon_roots_account.nonce,
-                    storage_root: HashedPartialTrie::from(Node::Empty).hash(),
-                    code_hash: old_beacon_roots_account.code_hash,
-                })
-                .to_vec(),
-            );
+                rlp::encode(&beacon_roots_account).to_vec(),
+            )?;
         }
 
         // For the last tx, we want to include the withdrawal addresses in the state
@@ -557,6 +541,22 @@ pub async fn gather_witness(
                 receipts_root: block.receipts_root,
             }
         } else {
+            println!(
+                "Beacon storage root pre tx {:?}, {:?}",
+                receipt.transaction_index.0[0],
+                trimmed_storage_mpts
+                    .get(&beacon_roots_key.into())
+                    .unwrap()
+                    .hash()
+            );
+            println!(
+                "Beacon storage root post tx {:?}, {:?}\n",
+                receipt.transaction_index.0[0],
+                next_storage_mpts
+                    .get(&beacon_roots_key.into())
+                    .unwrap()
+                    .hash()
+            );
             TrieRoots {
                 state_root: next_state_mpt.hash(),
                 transactions_root: new_txns_mpt.hash(),
