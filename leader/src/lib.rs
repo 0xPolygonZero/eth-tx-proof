@@ -445,11 +445,17 @@ pub async fn gather_witness(
         let mut beacon_roots_storage_trie =
             next_storage_mpts.get_mut(&H256(beacon_roots_key)).unwrap();
         let mut bytes = [0; 32];
-        let slot = block.timestamp % HISTORY_BUFFER_LENGTH.1 + HISTORY_BUFFER_LENGTH.1;
-        U256::from(slot).to_big_endian(&mut bytes);
-        let key = Nibbles::from_bytes_be(&keccak(bytes)).unwrap();
+        let slot1 = block.timestamp % HISTORY_BUFFER_LENGTH.1 + HISTORY_BUFFER_LENGTH.1;
+        U256::from(slot1).to_big_endian(&mut bytes);
+        let key1 = Nibbles::from_bytes_be(&keccak(bytes)).unwrap();
+        let mut bytes = [0; 32];
+        let slot2 = block.timestamp % HISTORY_BUFFER_LENGTH.1;
+        U256::from(slot2).to_big_endian(&mut bytes);
+        let key2 = Nibbles::from_bytes_be(&keccak(bytes)).unwrap();
         if let Some(parent_beacon_block_root) = block.parent_beacon_block_root {
-            beacon_roots_storage_trie.insert(key, parent_beacon_block_root.0.to_vec());
+            tracing::debug!("with parent beacon block root");
+            beacon_roots_storage_trie.insert(key1, parent_beacon_block_root.0.to_vec());
+            beacon_roots_storage_trie.insert(key2, block.timestamp);
             let old_beacon_roots_account: AccountRlp = rlp::decode(
                 next_state_mpt
                     .get(Nibbles::from_bytes_be(&beacon_roots_key).unwrap())
@@ -467,19 +473,21 @@ pub async fn gather_witness(
                 .to_vec(),
             );
         } else {
+            tracing::debug!("without parent beacon block root");
             let old_beacon_roots_account: AccountRlp = rlp::decode(
                 next_state_mpt
                     .get(Nibbles::from_bytes_be(&beacon_roots_key).unwrap())
                     .unwrap(),
             )
             .unwrap();
-            beacon_roots_storage_trie.delete(key);
+            beacon_roots_storage_trie.delete(key1);
+            beacon_roots_storage_trie.delete(key2);
             next_state_mpt.insert(
                 Nibbles::from_bytes_be(&beacon_roots_key).unwrap(),
                 rlp::encode(&AccountRlp {
                     balance: old_beacon_roots_account.balance,
                     nonce: old_beacon_roots_account.nonce,
-                    storage_root: HashedPartialTrie::default().hash(),
+                    storage_root: HashedPartialTrie::from(Node::Empty).hash(),
                     code_hash: old_beacon_roots_account.code_hash,
                 })
                 .to_vec(),
