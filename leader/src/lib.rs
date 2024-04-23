@@ -174,6 +174,7 @@ pub async fn gather_witness(
     provider: &Provider<Http>,
     request_miner_from_clique: bool,
 ) -> Result<Vec<GenerationInputs>> {
+    println!("Witness generation for block {:?}", block_number);
     let block = provider
         .get_block(BlockId::from(block_number))
         .await?
@@ -541,22 +542,6 @@ pub async fn gather_witness(
                 receipts_root: block.receipts_root,
             }
         } else {
-            println!(
-                "Beacon storage root pre tx {:?}, {:?}",
-                receipt.transaction_index.0[0],
-                trimmed_storage_mpts
-                    .get(&beacon_roots_key.into())
-                    .unwrap()
-                    .hash()
-            );
-            println!(
-                "Beacon storage root post tx {:?}, {:?}\n",
-                receipt.transaction_index.0[0],
-                next_storage_mpts
-                    .get(&beacon_roots_key.into())
-                    .unwrap()
-                    .hash()
-            );
             TrieRoots {
                 state_root: next_state_mpt.hash(),
                 transactions_root: new_txns_mpt.hash(),
