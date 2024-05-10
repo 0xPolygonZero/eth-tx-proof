@@ -28,3 +28,18 @@ pub fn has_storage_deletion(trace: &GethTrace) -> bool {
     }
     false
 }
+
+pub mod compat {
+    pub fn h256(_: alloy::primitives::B256) -> primitive_types::H256 {
+        todo!()
+    }
+    pub fn address(_: alloy::primitives::Address) -> ethers::types::Address {
+        todo!()
+    }
+    pub fn u256(_: alloy::primitives::U256) -> primitive_types::U256 {
+        todo!()
+    }
+    pub fn bloom(_: alloy::primitives::Bloom) -> [primitive_types::U256; 8] {
+        todo!()
+    }
+}

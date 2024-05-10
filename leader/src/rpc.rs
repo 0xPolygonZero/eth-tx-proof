@@ -1,5 +1,5 @@
+use alloy::primitives::{Address, B256 as H256, U256};
 use anyhow::Context;
-use ethers::types::{Address, H256, U256};
 use evm_arithmetization::proof::BlockHashes;
 use futures::{stream::FuturesOrdered, TryStreamExt};
 use reqwest::IntoUrl;
@@ -88,13 +88,13 @@ impl EthGetBlockByNumberResponse {
 
         while let Some(response) = futs.try_next().await? {
             // Ignore hash of the current block.
-            if response.result.number == block_number.into() {
+            if response.result.number == U256::from(block_number) {
                 hashes.push(response.result.parent_hash);
                 continue;
             }
 
             // Ignore the parent of the start block.
-            if response.result.number != start.into() {
+            if response.result.number != U256::from(start) {
                 hashes.push(response.result.parent_hash);
             }
 
@@ -111,8 +111,11 @@ pub(crate) async fn get_block_hashes(block_number: u64, url: &str) -> anyhow::Re
         EthGetBlockByNumberResponse::fetch_previous_block_hashes(url, block_number).await?;
 
     Ok(BlockHashes {
-        prev_hashes,
-        cur_hash: curr_block_info.result.hash,
+        prev_hashes: prev_hashes
+            .into_iter()
+            .map(crate::utils::compat::h256)
+            .collect(),
+        cur_hash: crate::utils::compat::h256(curr_block_info.result.hash),
     })
 }
 

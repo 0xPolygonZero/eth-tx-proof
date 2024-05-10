@@ -1,5 +1,4 @@
 use common::prover_state::P_STATE;
-use ethers::types::Transaction;
 use evm_arithmetization::GenerationInputs;
 use paladin::{
     operation::{FatalError, Monoid, Operation, Result},
@@ -33,10 +32,11 @@ impl Operation for TxProof {
             .signed_txn
             .as_ref()
             .map(|txn| {
-                rlp::decode::<Transaction>(txn)
-                    .expect("failed to decode signed transaction")
-                    .hash
-                    .to_string()
+                use alloy::rpc::types::eth::Transaction;
+                fn decode(_: &[u8]) -> Transaction {
+                    todo!("rlp::decode::<Transaction>")
+                }
+                decode(txn).hash.to_string()
             })
             .unwrap_or_else(|| {
                 format!(

@@ -1,8 +1,15 @@
 use std::collections::{BTreeMap, HashMap};
 use std::sync::Arc;
 
-use ethers::prelude::*;
-use ethers::utils::rlp;
+use alloy::primitives::{Address, Bloom, Bytes, FixedBytes, TxHash, B256 as H256, U256};
+use alloy::rpc::types::trace::geth::PreStateFrame;
+use alloy::rpc::types::{
+    eth::EIP1186StorageProof as StorageProof,
+    trace::geth::{
+        AccountState, GethDebugBuiltInTracerType, GethDebugTracerConfig, GethDebugTracerType,
+        GethDebugTracingOptions, GethTrace,
+    },
+};
 use evm_arithmetization::generation::mpt::AccountRlp;
 use mpt_trie::nibbles::{Nibbles, NibblesIntern};
 use mpt_trie::partial_trie::PartialTrie;
@@ -21,7 +28,7 @@ pub struct Mpt {
     pub root: H256,
 }
 
-const EMPTY_TRIE_HASH: H256 = H256([
+const EMPTY_TRIE_HASH: H256 = FixedBytes([
     86, 232, 31, 23, 27, 204, 85, 166, 255, 131, 69, 230, 146, 192, 248, 110, 91, 72, 224, 27, 153,
     108, 173, 192, 1, 98, 47, 181, 227, 99, 180, 33,
 ]);
@@ -30,13 +37,13 @@ impl Mpt {
     pub fn new() -> Self {
         Self {
             mpt: HashMap::new(),
-            root: H256::zero(),
+            root: H256::default(),
         }
     }
 
     pub fn to_partial_trie(&self) -> HashedPartialTrie {
         let trie = self.to_partial_trie_helper(self.root);
-        if trie == Node::Hash(EMPTY_TRIE_HASH).into() {
+        if trie == Node::Hash(crate::utils::compat::h256(EMPTY_TRIE_HASH)).into() {
             Node::Empty.into()
         } else {
             trie
@@ -48,7 +55,7 @@ impl Mpt {
         let data = if let Some(mpt_node) = node {
             mpt_node.0.clone()
         } else {
-            return Node::Hash(root).into();
+            return Node::Hash(crate::utils::compat::h256(root)).into();
         };
         let a = rlp::decode_list::<Vec<u8>>(&data);
         match a.len() {
@@ -134,7 +141,7 @@ pub fn insert_mpt(mpt: &mut Mpt, proof: Vec<Bytes>) {
 
 fn insert_mpt_helper(mpt: &mut Mpt, rlp_node: Bytes) {
     mpt.mpt
-        .insert(H256(keccak(&rlp_node)), MptNode(rlp_node.to_vec()));
+        .insert(FixedBytes(keccak(&rlp_node)), MptNode(rlp_node.to_vec()));
     let a = rlp::decode_list::<Vec<u8>>(&rlp_node);
     if a.len() == 2 {
         let prefix = a[0].clone();
@@ -145,7 +152,8 @@ fn insert_mpt_helper(mpt: &mut Mpt, rlp_node: Bytes) {
                 nibbles.to_hex_prefix_encoding(is_leaf).to_vec(),
                 a[1].clone(),
             ]);
-            mpt.mpt.insert(H256(keccak(&node)), MptNode(node.to_vec()));
+            mpt.mpt
+                .insert(FixedBytes(keccak(&node)), MptNode(node.to_vec()));
             if nibbles.is_empty() {
                 break;
             }
@@ -179,12 +187,8 @@ pub fn apply_diffs(
     contract_code: &mut HashMap<H256, Vec<u8>>,
     trace: GethTrace,
 ) -> (HashedPartialTrie, HashMap<H256, HashedPartialTrie>) {
-    let diff = if let GethTrace::Known(GethTraceFrame::PreStateTracer(PreStateFrame::Diff(diff))) =
-        trace
-    {
-        diff
-    } else {
-        panic!("wtf?");
+    let GethTrace::PreStateTracer(PreStateFrame::Diff(diff)) = trace else {
+        panic!();
     };
 
     let empty_node = HashedPartialTrie::from(Node::Empty);
