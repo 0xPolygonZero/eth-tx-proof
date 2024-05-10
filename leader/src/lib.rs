@@ -9,9 +9,11 @@ mod padding_and_withdrawals;
 
 use std::collections::{BTreeMap, HashMap};
 
+use alloy::consensus::TxType;
 use alloy::primitives::{Address, Bloom, Bytes, FixedBytes, TxHash, B256 as H256, U256};
 use alloy::providers::{ext::DebugApi as _, Provider as _};
-use alloy::rpc::types::trace::geth::{PreStateFrame, PreStateMode};
+use alloy::rpc::types::eth::Transaction;
+use alloy::rpc::types::trace::geth::{DiffMode, PreStateFrame, PreStateMode};
 use alloy::rpc::types::{
     eth::EIP1186StorageProof as StorageProof,
     trace::geth::{
@@ -171,7 +173,7 @@ pub async fn gather_witness(
 ) -> Result<Vec<GenerationInputs>> {
     let tx = provider.get_transaction_by_hash(tx).await?;
     let block_number = tx.block_number.unwrap();
-    let tx_index = tx.transaction_index.unwrap();
+    let tx_index = usize::try_from(tx.transaction_index.unwrap()).unwrap();
 
     let block = provider
         .get_block(block_number.into(), BLOCK_WITH_FULL_TRANSACTIONS)
@@ -224,7 +226,7 @@ pub async fn gather_witness(
                 state.insert(address, account);
             }
         }
-        txn_rlps.push(txn.rlp().to_vec());
+        txn_rlps.push(rlp::transaction(&txn));
         txns_info.push(txn);
     }
 
@@ -265,29 +267,21 @@ pub async fn gather_witness(
         }
     }
 
-    for &hash in block.transactions.iter().take(tx_index + 1) {
+    for &hash in block.transactions.hashes().take(tx_index + 1) {
         let trace = provider
             .debug_trace_transaction(hash, tracing_options_diff())
             .await?;
-        let diff =
-            if let GethTrace::Known(GethTraceFrame::PreStateTracer(PreStateFrame::Diff(diff))) =
-                trace
-            {
-                diff
-            } else {
-                panic!("wtf?");
-            };
-
-        let DiffMode { pre, post } = diff;
+        let GethTrace::PreStateTracer(PreStateFrame::Diff(DiffMode { post, pre })) = trace else {
+            panic!()
+        };
 
         for d in [pre, post] {
             for (address, account) in d {
                 let AccountState { storage, .. } = account;
-                let empty_storage = storage.is_none();
+                let empty_storage = storage.is_empty();
                 let mut storage_keys = vec![];
-                if let Some(stor) = storage {
-                    storage_keys.extend(stor.keys().copied());
-                }
+                storage_keys.extend(storage.keys().copied());
+
                 let (proof, storage_proof, _storage_hash, _account_is_empty) = get_proof(
                     address,
                     storage_keys.clone(),
@@ -328,10 +322,10 @@ pub async fn gather_witness(
     }
 
     let prev_block = provider
-        .get_block(block_number - 1)
+        .get_block((block_number - 1).into(), BLOCK_WITH_FULL_TRANSACTIONS)
         .await?
         .ok_or_else(|| anyhow!("Block not found. Block number: {}", block_number - 1))?;
-    state_mpt.root = prev_block.state_root;
+    state_mpt.root = prev_block.header.state_root;
 
     let (block_metadata, _final_hash) =
         get_block_metadata(block_number, chain_id, provider, request_miner_from_clique).await?;
@@ -339,8 +333,8 @@ pub async fn gather_witness(
     let mut state_mpt = state_mpt.to_partial_trie();
     let mut txns_mpt = HashedPartialTrie::from(Node::Empty);
     let mut receipts_mpt = HashedPartialTrie::from(Node::Empty);
-    let mut gas_used = U256::zero();
-    let mut bloom: Bloom = Bloom::zero();
+    let mut gas_used = U256::default();
+    let mut bloom = Bloom::default();
 
     // Withdrawals
     let wds = if let Some(v) = &block.withdrawals {
@@ -352,7 +346,8 @@ pub async fn gather_witness(
     };
 
     // Block hashes
-    let block_hashes = get_block_hashes(block_number, provider.url().as_ref()).await?;
+    let block_hashes =
+        get_block_hashes(block_number, provider.client().transport().url().as_ref()).await?;
 
     let mut storage_mpts: HashMap<_, _> = storage_mpts
         .iter()
@@ -394,22 +389,22 @@ pub async fn gather_witness(
         assert_eq!(trimmed_state_mpt.hash(), state_mpt.hash());
         let receipt = provider.get_transaction_receipt(tx.hash).await?.unwrap();
         let mut new_bloom = bloom;
-        new_bloom.accrue_bloom(&receipt.logs_bloom);
+        new_bloom.accrue_bloom(receipt.inner.logs_bloom());
         let mut new_txns_mpt = txns_mpt.clone();
         new_txns_mpt
             .insert(
-                Nibbles::from_bytes_be(&rlp::encode(&receipt.transaction_index)).unwrap(),
+                Nibbles::from_bytes_be(&rlp::option_u64(&receipt.transaction_index)).unwrap(),
                 signed_txn.clone(),
             )
             .unwrap();
         let mut new_receipts_mpt = receipts_mpt.clone();
-        let mut bytes = rlp::encode(&receipt).to_vec();
-        if !receipt.transaction_type.unwrap().is_zero() {
-            bytes.insert(0, receipt.transaction_type.unwrap().0[0] as u8);
+        let mut bytes = rlp::transaction_receipt(&receipt);
+        if !matches!(receipt.transaction_type(), TxType::Legacy) {
+            bytes.insert(0, receipt.transaction_type() as u8);
         }
         new_receipts_mpt
             .insert(
-                Nibbles::from_bytes_be(&rlp::encode(&receipt.transaction_index)).unwrap(),
+                Nibbles::from_bytes_be(&rlp::option_u64(&receipt.transaction_index)).unwrap(),
                 bytes,
             )
             .unwrap();
@@ -421,9 +416,9 @@ pub async fn gather_witness(
 
         let trie_roots_after = if last_tx {
             TrieRoots {
-                state_root: block.state_root,
-                transactions_root: block.transactions_root,
-                receipts_root: block.receipts_root,
+                state_root: crate::utils::compat::h256(block.header.state_root),
+                transactions_root: crate::utils::compat::h256(block.header.transactions_root),
+                receipts_root: crate::utils::compat::h256(block.header.receipts_root),
             }
         } else {
             TrieRoots {
@@ -529,4 +524,19 @@ fn create_fully_hashed_out_trie_from_hash(h: TrieRootHash) -> HashedPartialTrie 
     trie.insert(Nibbles::default(), h).unwrap();
 
     trie
+}
+
+mod rlp {
+    use alloy::rpc::types::eth::TransactionReceipt;
+
+    use super::*;
+    pub fn transaction(_: &Transaction) -> Vec<u8> {
+        todo!()
+    }
+    pub fn transaction_receipt(_: &TransactionReceipt) -> Vec<u8> {
+        todo!()
+    }
+    pub fn option_u64(_: &Option<u64>) -> Vec<u8> {
+        todo!()
+    }
 }

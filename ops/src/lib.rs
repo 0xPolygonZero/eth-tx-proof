@@ -34,7 +34,7 @@ impl Operation for TxProof {
             .map(|txn| {
                 use alloy::rpc::types::eth::Transaction;
                 fn decode(_: &[u8]) -> Transaction {
-                    todo!("rlp::decode::<Transaction>")
+                    todo!("rlp::decode::<Transaction>") // TODO(aatifsyed)
                 }
                 decode(txn).hash.to_string()
             })
