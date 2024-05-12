@@ -4023,7 +4023,6 @@ version = "0.1.0"
 dependencies = [
  "alloy",
  "common",
- "ethers",
  "evm_arithmetization 0.1.3 (git+https://github.com/0xPolygonZero/zk_evm.git?branch=develop)",
  "paladin-core",
  "proof_gen",

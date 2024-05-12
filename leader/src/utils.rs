@@ -4,7 +4,7 @@ use alloy::{
 };
 
 pub fn keccak<T: AsRef<[u8]> + Clone>(bytes: T) -> B256 {
-    FixedBytes(ethers::utils::keccak256(bytes.clone()))
+    FixedBytes(__ethers_for_compat::utils::keccak256(bytes.clone()))
 }
 
 pub fn has_storage_deletion(trace: &GethTrace) -> bool {
@@ -33,26 +33,28 @@ pub mod compat {
 
     use alloy::primitives::FixedBytes;
 
-    pub fn h256(FixedBytes(it): alloy::primitives::B256) -> primitive_types::H256 {
-        primitive_types::H256(it)
+    pub fn h256(FixedBytes(it): alloy::primitives::B256) -> __primitive_types_for_compat::H256 {
+        __primitive_types_for_compat::H256(it)
     }
     pub fn address(
         alloy::primitives::Address(FixedBytes(it)): alloy::primitives::Address,
-    ) -> ethers::types::Address {
-        primitive_types::H160(it)
+    ) -> __ethers_for_compat::types::Address {
+        __primitive_types_for_compat::H160(it)
     }
-    pub fn u256(it: alloy::primitives::U256) -> primitive_types::U256 {
-        primitive_types::U256::from_big_endian(&it.to_be_bytes::<32>())
+    pub fn u256(it: alloy::primitives::U256) -> __primitive_types_for_compat::U256 {
+        __primitive_types_for_compat::U256::from_big_endian(&it.to_be_bytes::<32>())
     }
     pub fn bloom(
         alloy::primitives::Bloom(FixedBytes(it)): alloy::primitives::Bloom,
-    ) -> [primitive_types::U256; 8] {
+    ) -> [__primitive_types_for_compat::U256; 8] {
         // have 8 * 256, want 256 * 8, (no unsafe, no unstable)
         // TODO(aatifsyed): we're going from unintepreted bytes to an integer type
         //                  is this right?
         let mut chunks = it.chunks_exact(32);
         array::from_fn(|_ix| {
-            primitive_types::U256::from(<[u8; 32]>::try_from(chunks.next().unwrap()).unwrap())
+            __primitive_types_for_compat::U256::from(
+                <[u8; 32]>::try_from(chunks.next().unwrap()).unwrap(),
+            )
         })
     }
 }

@@ -274,13 +274,13 @@ pub fn apply_diffs(
             };
             mpt.insert(
                 address2nibbles(*addr),
-                ethers::utils::rlp::encode(&account).to_vec(),
+                __ethers_for_compat::utils::rlp::encode(&account).to_vec(),
             ) // TODO(aatifsyed): make the required change to evm_arithmetization
             .unwrap();
         } else {
             let old = mpt
                 .get(address2nibbles(*addr))
-                .map(|d| ethers::utils::rlp::decode(d).unwrap())
+                .map(|d| __ethers_for_compat::utils::rlp::decode(d).unwrap())
                 .unwrap_or(AccountRlp {
                     nonce: Default::default(),
                     balance: Default::default(),
@@ -317,7 +317,7 @@ pub fn apply_diffs(
             };
             mpt.insert(
                 address2nibbles(*addr),
-                ethers::utils::rlp::encode(&account).to_vec(),
+                __ethers_for_compat::utils::rlp::encode(&account).to_vec(),
             )
             .unwrap();
         }

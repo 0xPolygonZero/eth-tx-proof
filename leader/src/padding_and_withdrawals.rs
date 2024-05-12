@@ -128,12 +128,16 @@ fn update_trie_state_from_withdrawals<'a>(
 
         let acc_bytes = state.get(h_addr_nibs).unwrap();
 
-        let mut acc_data = ethers::utils::rlp::decode::<AccountRlp>(acc_bytes).unwrap();
+        let mut acc_data =
+            __ethers_for_compat::utils::rlp::decode::<AccountRlp>(acc_bytes).unwrap();
 
         acc_data.balance += crate::utils::compat::u256(amt);
 
         state
-            .insert(h_addr_nibs, ethers::utils::rlp::encode(&acc_data).to_vec())
+            .insert(
+                h_addr_nibs,
+                __ethers_for_compat::utils::rlp::encode(&acc_data).to_vec(),
+            )
             .unwrap();
     }
 }
