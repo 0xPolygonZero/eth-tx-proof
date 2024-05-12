@@ -7,6 +7,7 @@ edition = "2021"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
+alloy.workspace = true
 tokio = { workspace = true }
 plonky2 = { workspace = true }
 evm_arithmetization = { workspace = true }
@@ -36,3 +37,4 @@ serde_json = "1.0.108"
 # Local dependencies
 ops = { path = "../ops" }
 common = { path = "../common" }
+primitive-types = "0.12.2"

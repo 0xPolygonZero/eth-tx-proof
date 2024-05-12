@@ -9,10 +9,19 @@ mod padding_and_withdrawals;
 
 use std::collections::{BTreeMap, HashMap};
 
+use alloy::consensus::TxType;
+use alloy::primitives::{Address, Bloom, Bytes, FixedBytes, TxHash, B256 as H256, U256};
+use alloy::providers::{ext::DebugApi as _, Provider as _};
+use alloy::rpc::types::eth::Transaction;
+use alloy::rpc::types::trace::geth::{DiffMode, PreStateFrame, PreStateMode};
+use alloy::rpc::types::{
+    eth::EIP1186StorageProof as StorageProof,
+    trace::geth::{
+        AccountState, GethDebugBuiltInTracerType, GethDebugTracerConfig, GethDebugTracerType,
+        GethDebugTracingOptions, GethTrace,
+    },
+};
 use anyhow::{anyhow, Result};
-use ethers::prelude::*;
-use ethers::types::GethDebugTracerType;
-use ethers::utils::rlp;
 use evm_arithmetization::generation::{GenerationInputs, TrieInputs};
 use evm_arithmetization::proof::TrieRoots;
 use evm_arithmetization::proof::{BlockMetadata, ExtraBlockData};
@@ -31,14 +40,16 @@ use crate::{
     rpc::get_block_hashes,
 };
 
+type Provider = alloy::providers::RootProvider<alloy::transports::http::Http<reqwest::Client>>;
+
 /// Keccak of empty bytes.
-pub const EMPTY_HASH: H256 = H256([
+pub const EMPTY_HASH: H256 = FixedBytes([
     197, 210, 70, 1, 134, 247, 35, 60, 146, 126, 125, 178, 220, 199, 3, 192, 229, 0, 182, 83, 202,
     130, 39, 59, 123, 250, 216, 4, 93, 133, 164, 112,
 ]);
 
 /// 0x56e81f171bcc55a6ff8345e692c0f86e5b48e01b996cadc001622fb5e363b421
-const EMPTY_TRIE_HASH: H256 = H256([
+const EMPTY_TRIE_HASH: H256 = FixedBytes([
     86, 232, 31, 23, 27, 204, 85, 166, 255, 131, 69, 230, 146, 192, 248, 110, 91, 72, 224, 27, 153,
     108, 173, 192, 1, 98, 47, 181, 227, 99, 180, 33,
 ]);
@@ -57,12 +68,12 @@ struct PartialTrieState {
 pub async fn get_proof(
     address: Address,
     locations: Vec<H256>,
-    block_number: U64,
-    provider: &Provider<Http>,
+    block_number: u64,
+    provider: &Provider,
 ) -> Result<(Vec<Bytes>, Vec<StorageProof>, H256, bool)> {
     // tracing::info!("Proof {:?}: {:?} {:?}", block_number, address, locations);
     // println!("Proof {:?}: {:?} {:?}", block_number, address, locations);
-    let proof = provider.get_proof(address, locations, Some(block_number.into()));
+    let proof = provider.get_proof(address, locations, block_number.into());
     let proof = proof.await?;
     let is_empty =
         proof.balance.is_zero() && proof.nonce.is_zero() && proof.code_hash == EMPTY_HASH;
@@ -80,8 +91,7 @@ fn tracing_options() -> GethDebugTracingOptions {
         tracer: Some(GethDebugTracerType::BuiltInTracer(
             GethDebugBuiltInTracerType::PreStateTracer,
         )),
-
-        ..GethDebugTracingOptions::default()
+        ..Default::default()
     }
 }
 
@@ -91,11 +101,7 @@ fn tracing_options_diff() -> GethDebugTracingOptions {
             GethDebugBuiltInTracerType::PreStateTracer,
         )),
 
-        tracer_config: Some(GethDebugTracerConfig::BuiltInTracer(
-            GethDebugBuiltInTracerConfig::PreStateTracer(PreStateConfig {
-                diff_mode: Some(true),
-            }),
-        )),
+        tracer_config: GethDebugTracerConfig(todo!()),
         ..GethDebugTracingOptions::default()
     }
 }
@@ -109,66 +115,68 @@ fn contract_codes() -> HashMap<H256, Vec<u8>> {
 }
 
 fn convert_bloom(bloom: Bloom) -> [U256; 8] {
-    let mut other_bloom = [U256::zero(); 8];
+    let mut other_bloom = [U256::default(); 8];
     for i in 0..8 {
-        other_bloom[i] = U256::from_big_endian(&bloom.0[i * 32..(i + 1) * 32]);
+        other_bloom[i] = U256::from_be_slice(&bloom.0[i * 32..(i + 1) * 32]);
     }
     other_bloom
 }
 
+const BLOCK_WITH_FULL_TRANSACTIONS: bool = true;
+
 /// Get the Plonky2 block metadata at the given block number.
 pub async fn get_block_metadata(
-    block_number: U64,
+    block_number: u64,
     block_chain_id: U256,
-    provider: &Provider<Http>,
+    provider: &Provider,
     request_miner_from_clique: bool,
 ) -> Result<(BlockMetadata, H256)> {
     let block = provider
-        .get_block(block_number)
+        .get_block(block_number.into(), BLOCK_WITH_FULL_TRANSACTIONS)
         .await?
         .ok_or_else(|| anyhow!("Block not found. Block number: {}", block_number))?;
 
     let block_beneficiary = match request_miner_from_clique {
-        false => block.author.unwrap(),
+        false => block.header.miner,
         true => {
-            CliqueGetSignersAtHashResponse::fetch(provider.url().to_string(), block.hash.unwrap())
-                .await?
-                .result
-                .signer
+            CliqueGetSignersAtHashResponse::fetch(
+                provider.client().transport().url(),
+                block.header.hash.unwrap(),
+            )
+            .await?
+            .result
+            .signer
         }
     };
 
     Ok((
         BlockMetadata {
-            block_beneficiary,
-            block_timestamp: block.timestamp,
-            block_number: U256([block_number.0[0], 0, 0, 0]),
-            block_difficulty: block.difficulty,
-            block_gaslimit: block.gas_limit,
-            block_chain_id,
-            block_base_fee: block.base_fee_per_gas.unwrap(),
-            block_bloom: convert_bloom(block.logs_bloom.unwrap()),
-            block_gas_used: block.gas_used,
-            block_random: block.mix_hash.unwrap(),
+            block_beneficiary: crate::utils::compat::address(block_beneficiary),
+            block_timestamp: block.header.timestamp.into(),
+            block_number: block_number.into(),
+            block_difficulty: crate::utils::compat::u256(block.header.difficulty),
+            block_gaslimit: block.header.gas_limit.into(),
+            block_chain_id: crate::utils::compat::u256(block_chain_id),
+            block_base_fee: block.header.base_fee_per_gas.unwrap().into(),
+            block_bloom: crate::utils::compat::bloom(block.header.logs_bloom),
+            block_gas_used: block.header.gas_used.into(),
+            block_random: crate::utils::compat::h256(block.header.mix_hash.unwrap()),
         },
-        block.state_root,
+        block.header.state_root,
     ))
 }
 
 pub async fn gather_witness(
     tx: TxHash,
-    provider: &Provider<Http>,
+    provider: &Provider,
     request_miner_from_clique: bool,
 ) -> Result<Vec<GenerationInputs>> {
-    let tx = provider
-        .get_transaction(tx)
-        .await?
-        .ok_or_else(|| anyhow!("Transaction not found."))?;
-    let block_number = tx.block_number.unwrap().0[0];
-    let tx_index = tx.transaction_index.unwrap().0[0] as usize;
+    let tx = provider.get_transaction_by_hash(tx).await?;
+    let block_number = tx.block_number.unwrap();
+    let tx_index = usize::try_from(tx.transaction_index.unwrap()).unwrap();
 
     let block = provider
-        .get_block(block_number)
+        .get_block(block_number.into(), BLOCK_WITH_FULL_TRANSACTIONS)
         .await?
         .ok_or_else(|| anyhow!("Block not found. Block number: {}", block_number))?;
 
@@ -177,7 +185,7 @@ pub async fn gather_witness(
     let mut storage_mpts: HashMap<_, Mpt> = HashMap::new();
     let mut txn_rlps = vec![];
 
-    let chain_id = EthChainIdResponse::fetch(provider.url().to_string())
+    let chain_id = EthChainIdResponse::fetch(provider.client().transport().url())
         .await?
         .result;
 
@@ -186,23 +194,20 @@ pub async fn gather_witness(
     let mut traces: Vec<BTreeMap<Address, AccountState>> = vec![];
     let mut txns_info = vec![];
 
-    for &hash in block.transactions.iter().take(tx_index + 1) {
-        let txn = provider.get_transaction(hash);
-        let txn = txn
-            .await?
-            .ok_or_else(|| anyhow!("Transaction not found."))?;
+    for &hash in block
+        .transactions
+        .hashes()
+        .take(usize::try_from(tx_index).unwrap() + 1)
+    {
+        let txn = provider.get_transaction_by_hash(hash).await?;
         // chain_id = txn.chain_id.unwrap(); // TODO: For type-0 txn, the chain_id is
         // not set so the unwrap panics.
         let trace = provider
             .debug_trace_transaction(hash, tracing_options())
             .await?;
-        let accounts = if let GethTrace::Known(GethTraceFrame::PreStateTracer(
-            PreStateFrame::Default(accounts),
-        )) = trace
-        {
-            accounts.0
-        } else {
-            panic!("wtf?");
+        let GethTrace::PreStateTracer(PreStateFrame::Default(PreStateMode(accounts))) = trace
+        else {
+            panic!();
         };
         traces.push(accounts.clone());
         for (address, account) in accounts {
@@ -210,34 +215,26 @@ pub async fn gather_witness(
             // If this account already exists, merge the storage.
             if let Some(acc) = state.get(&address) {
                 let mut acc = acc.clone();
-                let mut new_store = acc.storage.clone().unwrap_or_default();
+                let mut new_store = acc.storage.clone();
                 let stor = account.storage;
-                if let Some(s) = stor {
-                    for (k, v) in s {
-                        new_store.insert(k, v);
-                    }
+                for (k, v) in stor {
+                    new_store.insert(k, v);
                 }
-                acc.storage = if new_store.is_empty() {
-                    None
-                } else {
-                    Some(new_store)
-                };
+                acc.storage = new_store;
                 state.insert(address, acc);
             } else {
                 state.insert(address, account);
             }
         }
-        txn_rlps.push(txn.rlp().to_vec());
+        txn_rlps.push(rlp::transaction(&txn));
         txns_info.push(txn);
     }
 
     for (address, account) in &state {
         let AccountState { code, storage, .. } = account;
-        let empty_storage = storage.is_none();
+        let empty_storage = storage.is_empty();
         let mut storage_keys = vec![];
-        if let Some(stor) = storage {
-            storage_keys.extend(stor.keys().copied());
-        }
+        storage_keys.extend(storage.keys().copied());
         let (proof, storage_proof, storage_hash, _account_is_empty) = get_proof(
             *address,
             storage_keys.clone(),
@@ -270,29 +267,21 @@ pub async fn gather_witness(
         }
     }
 
-    for &hash in block.transactions.iter().take(tx_index + 1) {
+    for &hash in block.transactions.hashes().take(tx_index + 1) {
         let trace = provider
             .debug_trace_transaction(hash, tracing_options_diff())
             .await?;
-        let diff =
-            if let GethTrace::Known(GethTraceFrame::PreStateTracer(PreStateFrame::Diff(diff))) =
-                trace
-            {
-                diff
-            } else {
-                panic!("wtf?");
-            };
-
-        let DiffMode { pre, post } = diff;
+        let GethTrace::PreStateTracer(PreStateFrame::Diff(DiffMode { post, pre })) = trace else {
+            panic!()
+        };
 
         for d in [pre, post] {
             for (address, account) in d {
                 let AccountState { storage, .. } = account;
-                let empty_storage = storage.is_none();
+                let empty_storage = storage.is_empty();
                 let mut storage_keys = vec![];
-                if let Some(stor) = storage {
-                    storage_keys.extend(stor.keys().copied());
-                }
+                storage_keys.extend(storage.keys().copied());
+
                 let (proof, storage_proof, _storage_hash, _account_is_empty) = get_proof(
                     address,
                     storage_keys.clone(),
@@ -333,24 +322,19 @@ pub async fn gather_witness(
     }
 
     let prev_block = provider
-        .get_block(block_number - 1)
+        .get_block((block_number - 1).into(), BLOCK_WITH_FULL_TRANSACTIONS)
         .await?
         .ok_or_else(|| anyhow!("Block not found. Block number: {}", block_number - 1))?;
-    state_mpt.root = prev_block.state_root;
+    state_mpt.root = prev_block.header.state_root;
 
-    let (block_metadata, _final_hash) = get_block_metadata(
-        block_number.into(),
-        chain_id,
-        provider,
-        request_miner_from_clique,
-    )
-    .await?;
+    let (block_metadata, _final_hash) =
+        get_block_metadata(block_number, chain_id, provider, request_miner_from_clique).await?;
 
     let mut state_mpt = state_mpt.to_partial_trie();
     let mut txns_mpt = HashedPartialTrie::from(Node::Empty);
     let mut receipts_mpt = HashedPartialTrie::from(Node::Empty);
-    let mut gas_used = U256::zero();
-    let mut bloom: Bloom = Bloom::zero();
+    let mut gas_used = U256::default();
+    let mut bloom = Bloom::default();
 
     // Withdrawals
     let wds = if let Some(v) = &block.withdrawals {
@@ -362,7 +346,8 @@ pub async fn gather_witness(
     };
 
     // Block hashes
-    let block_hashes = get_block_hashes(block_number, provider.url().as_ref()).await?;
+    let block_hashes =
+        get_block_hashes(block_number, provider.client().transport().url().as_ref()).await?;
 
     let mut storage_mpts: HashMap<_, _> = storage_mpts
         .iter()
@@ -404,22 +389,22 @@ pub async fn gather_witness(
         assert_eq!(trimmed_state_mpt.hash(), state_mpt.hash());
         let receipt = provider.get_transaction_receipt(tx.hash).await?.unwrap();
         let mut new_bloom = bloom;
-        new_bloom.accrue_bloom(&receipt.logs_bloom);
+        new_bloom.accrue_bloom(receipt.inner.logs_bloom());
         let mut new_txns_mpt = txns_mpt.clone();
         new_txns_mpt
             .insert(
-                Nibbles::from_bytes_be(&rlp::encode(&receipt.transaction_index)).unwrap(),
+                Nibbles::from_bytes_be(&rlp::option_u64(&receipt.transaction_index)).unwrap(),
                 signed_txn.clone(),
             )
             .unwrap();
         let mut new_receipts_mpt = receipts_mpt.clone();
-        let mut bytes = rlp::encode(&receipt).to_vec();
-        if !receipt.transaction_type.unwrap().is_zero() {
-            bytes.insert(0, receipt.transaction_type.unwrap().0[0] as u8);
+        let mut bytes = rlp::transaction_receipt(&receipt);
+        if !matches!(receipt.transaction_type(), TxType::Legacy) {
+            bytes.insert(0, receipt.transaction_type() as u8);
         }
         new_receipts_mpt
             .insert(
-                Nibbles::from_bytes_be(&rlp::encode(&receipt.transaction_index)).unwrap(),
+                Nibbles::from_bytes_be(&rlp::option_u64(&receipt.transaction_index)).unwrap(),
                 bytes,
             )
             .unwrap();
@@ -431,9 +416,9 @@ pub async fn gather_witness(
 
         let trie_roots_after = if last_tx {
             TrieRoots {
-                state_root: block.state_root,
-                transactions_root: block.transactions_root,
-                receipts_root: block.receipts_root,
+                state_root: crate::utils::compat::h256(block.header.state_root),
+                transactions_root: crate::utils::compat::h256(block.header.transactions_root),
+                receipts_root: crate::utils::compat::h256(block.header.receipts_root),
             }
         } else {
             TrieRoots {
@@ -539,4 +524,19 @@ fn create_fully_hashed_out_trie_from_hash(h: TrieRootHash) -> HashedPartialTrie 
     trie.insert(Nibbles::default(), h).unwrap();
 
     trie
+}
+
+mod rlp {
+    use alloy::rpc::types::eth::TransactionReceipt;
+
+    use super::*;
+    pub fn transaction(_: &Transaction) -> Vec<u8> {
+        todo!()
+    }
+    pub fn transaction_receipt(_: &TransactionReceipt) -> Vec<u8> {
+        todo!()
+    }
+    pub fn option_u64(_: &Option<u64>) -> Vec<u8> {
+        todo!()
+    }
 }

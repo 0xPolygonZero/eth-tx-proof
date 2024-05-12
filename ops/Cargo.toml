@@ -5,6 +5,7 @@ license = "MIT or Apache-2.0"
 edition = "2021"
 
 [dependencies]
+alloy.workspace = true
 paladin-core = { workspace = true }
 serde = { workspace = true }
 proof_gen = { workspace = true }
