@@ -32,7 +32,7 @@ use padding_and_withdrawals::{
     add_withdrawals_to_txns, pad_gen_inputs_with_dummy_inputs_if_needed, BlockMetaAndHashes,
 };
 use rpc::{CliqueGetSignersAtHashResponse, EthChainIdResponse};
-use trace_decoder::types::{HashedAccountAddr, TrieRootHash};
+use trace_decoder::types::HashedAccountAddr;
 
 use crate::utils::{has_storage_deletion, keccak};
 use crate::{
@@ -433,23 +433,31 @@ pub async fn gather_witness(
                 state_trie: trimmed_state_mpt,
                 transactions_trie: txns_mpt.clone(),
                 receipts_trie: receipts_mpt.clone(),
-                storage_tries: trimmed_storage_mpts.into_iter().collect(),
+                storage_tries: trimmed_storage_mpts
+                    .into_iter()
+                    .map(|(k, v)| (crate::utils::compat::h256(k), v))
+                    .collect(),
             },
             withdrawals: vec![],
-            contract_code: contract_codes.clone(),
+            contract_code: contract_codes
+                .clone()
+                .into_iter()
+                .map(|(k, v)| (crate::utils::compat::h256(k), v))
+                .collect(),
             block_metadata: block_metadata.clone(),
             block_hashes: block_hashes.clone(),
-            gas_used_before: gas_used,
-            gas_used_after: gas_used + receipt.gas_used.unwrap(),
-            checkpoint_state_trie_root: prev_block.state_root, // TODO: make it configurable
+            gas_used_before: crate::utils::compat::u256(gas_used),
+            gas_used_after: crate::utils::compat::u256(gas_used + U256::from(receipt.gas_used)),
+            checkpoint_state_trie_root: crate::utils::compat::h256(prev_block.header.state_root), /* TODO: make it configurable */
             trie_roots_after,
-            txn_number_before: receipt.transaction_index.0[0].into(),
+            txn_number_before: receipt.transaction_index.unwrap().into(), /* TODO(aatifsyed): is
+                                                                           * this unwrap ok? */
         };
 
         state_mpt = next_state_mpt;
         storage_mpts = next_storage_mpts;
-        gas_used += receipt.gas_used.unwrap();
-        assert_eq!(gas_used, receipt.cumulative_gas_used);
+        gas_used += receipt.gas_used.into();
+        assert_eq!(gas_used, U256::from(receipt.inner.cumulative_gas_used()));
         bloom = new_bloom;
         txns_mpt = new_txns_mpt;
         receipts_mpt = new_receipts_mpt;
@@ -474,7 +482,7 @@ pub async fn gather_witness(
             // No starting tries to work with, so we will have tries that are 100% hashed
             // out.
             PartialTrieState {
-                state: create_fully_hashed_out_trie_from_hash(block.state_root),
+                state: create_fully_hashed_out_trie_from_hash(block.header.state_root),
                 txn: create_fully_hashed_out_trie_from_hash(EMPTY_TRIE_HASH),
                 receipt: create_fully_hashed_out_trie_from_hash(EMPTY_TRIE_HASH),
                 storage: HashMap::default(),
@@ -482,13 +490,16 @@ pub async fn gather_witness(
         });
 
     let initial_extra_data = ExtraBlockData {
-        checkpoint_state_trie_root: prev_block.state_root,
+        checkpoint_state_trie_root: crate::utils::compat::h256(prev_block.header.state_root),
         ..Default::default()
     };
 
     let mut final_tries = PartialTrieState {
         state: state_mpt,
-        storage: storage_mpts,
+        storage: storage_mpts
+            .into_iter()
+            .map(|(k, v)| (crate::utils::compat::h256(k), v))
+            .collect(),
         txn: txns_mpt,
         receipt: receipts_mpt,
     };
@@ -496,7 +507,7 @@ pub async fn gather_witness(
     let final_extra_data = proof_gen_ir
         .last()
         .map(|ir| ExtraBlockData {
-            checkpoint_state_trie_root: prev_block.state_root,
+            checkpoint_state_trie_root: crate::utils::compat::h256(prev_block.header.state_root),
             txn_number_before: ir.txn_number_before,
             txn_number_after: ir.txn_number_before,
             gas_used_before: ir.gas_used_after,
@@ -519,24 +530,28 @@ pub async fn gather_witness(
     Ok(proof_gen_ir)
 }
 
-fn create_fully_hashed_out_trie_from_hash(h: TrieRootHash) -> HashedPartialTrie {
+fn create_fully_hashed_out_trie_from_hash(h: H256) -> HashedPartialTrie {
+    let h = crate::utils::compat::h256(h);
     let mut trie = HashedPartialTrie::default();
     trie.insert(Nibbles::default(), h).unwrap();
 
     trie
 }
 
-mod rlp {
+pub mod rlp {
     use alloy::rpc::types::eth::TransactionReceipt;
 
     use super::*;
+
     pub fn transaction(_: &Transaction) -> Vec<u8> {
         todo!()
     }
     pub fn transaction_receipt(_: &TransactionReceipt) -> Vec<u8> {
         todo!()
     }
-    pub fn option_u64(_: &Option<u64>) -> Vec<u8> {
-        todo!()
+    pub fn option_u64(it: &Option<u64>) -> Vec<u8> {
+        let mut v = vec![];
+        alloy::rlp::encode_list(it.as_slice(), &mut v);
+        v
     }
 }

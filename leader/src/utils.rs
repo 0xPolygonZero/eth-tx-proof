@@ -1,6 +1,5 @@
-
-use ethers::utils::keccak256;
 use alloy::rpc::types::trace::geth::{GethTrace, PreStateFrame};
+use ethers::utils::keccak256;
 
 pub fn keccak<T: AsRef<[u8]> + Clone>(bytes: T) -> [u8; 32] {
     keccak256(bytes.clone())

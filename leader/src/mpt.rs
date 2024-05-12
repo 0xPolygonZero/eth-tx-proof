@@ -2,6 +2,7 @@ use std::collections::{BTreeMap, HashMap};
 use std::sync::Arc;
 
 use alloy::primitives::{Address, Bloom, Bytes, FixedBytes, TxHash, B256 as H256, U256};
+use alloy::rlp::Decodable;
 use alloy::rpc::types::trace::geth::PreStateFrame;
 use alloy::rpc::types::{
     eth::EIP1186StorageProof as StorageProof,
@@ -57,7 +58,7 @@ impl Mpt {
         } else {
             return Node::Hash(crate::utils::compat::h256(root)).into();
         };
-        let a = rlp::decode_list::<Vec<u8>>(&data);
+        let a: Vec<Vec<u8>> = crate::rlp::decode_list2(&data);
         match a.len() {
             17 => {
                 let value = a[16].clone();
@@ -142,7 +143,7 @@ pub fn insert_mpt(mpt: &mut Mpt, proof: Vec<Bytes>) {
 fn insert_mpt_helper(mpt: &mut Mpt, rlp_node: Bytes) {
     mpt.mpt
         .insert(FixedBytes(keccak(&rlp_node)), MptNode(rlp_node.to_vec()));
-    let a = rlp::decode_list::<Vec<u8>>(&rlp_node);
+    let a = <Vec<Vec<u8>> as alloy::rlp::Decodable>::decode(&mut &rlp_node[..]).unwrap();
     if a.len() == 2 {
         let prefix = a[0].clone();
         let is_leaf = (prefix[0] >> 4 == 2) || (prefix[0] >> 4 == 3);
@@ -196,32 +197,30 @@ pub fn apply_diffs(
     let tokk = |k: H256| Nibbles::from_bytes_be(&keccak(k.0)).unwrap();
 
     for (addr, old) in &diff.pre {
-        let key = H256(keccak(addr.0));
+        let key = FixedBytes(keccak(addr.0));
         if !diff.post.contains_key(addr) {
             storage.remove(&key);
         } else {
             let new = diff.post.get(addr).unwrap();
-            if old.storage.clone().unwrap_or_default().is_empty()
-                && new.storage.clone().unwrap_or_default().is_empty()
-            {
+            if old.storage.is_empty() && new.storage.is_empty() {
                 continue;
             }
             let mut trie = storage.get(&key).unwrap().clone();
-            for (&k, &v) in &old.storage.clone().unwrap_or_default() {
-                if !new.storage.clone().unwrap_or_default().contains_key(&k) {
+            for (k, v) in &old.storage {
+                if !new.storage.contains_key(k) {
                     // dbg!(format!("Del {:?} {:?}", addr, k));
-                    trie.delete(tokk(k)).unwrap();
+                    trie.delete(tokk(*k)).unwrap();
                     // println!("Done Del {:?} {:?}", addr, k);
                 } else {
-                    let sanity = trie.get(tokk(k)).unwrap();
-                    let sanity = rlp::decode::<U256>(sanity).unwrap();
+                    let sanity = trie.get(tokk(*k)).unwrap();
+                    let sanity = U256::decode(&mut sanity).unwrap();
                     assert_eq!(sanity, v.into_uint());
-                    let w = *new.storage.clone().unwrap_or_default().get(&k).unwrap();
+                    let w = *new.storage.get(k).unwrap();
                     trie.insert(tokk(k), rlp::encode(&w.into_uint()).to_vec())
                         .unwrap();
                 }
             }
-            for (&k, v) in &new.storage.clone().unwrap_or_default() {
+            for (k, v) in &new.storage {
                 if !old.storage.clone().unwrap_or_default().contains_key(&k) {
                     trie.insert(tokk(k), rlp::encode(&v.into_uint()).to_vec())
                         .unwrap();
