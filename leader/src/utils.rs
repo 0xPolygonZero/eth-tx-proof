@@ -1,7 +1,10 @@
-use alloy::rpc::types::trace::geth::{GethTrace, PreStateFrame};
+use alloy::{
+    primitives::{FixedBytes, B256},
+    rpc::types::trace::geth::{GethTrace, PreStateFrame},
+};
 
-pub fn keccak<T: AsRef<[u8]> + Clone>(bytes: T) -> [u8; 32] {
-    ethers::utils::keccak256(bytes.clone())
+pub fn keccak<T: AsRef<[u8]> + Clone>(bytes: T) -> B256 {
+    FixedBytes(ethers::utils::keccak256(bytes.clone()))
 }
 
 pub fn has_storage_deletion(trace: &GethTrace) -> bool {

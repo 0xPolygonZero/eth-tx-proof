@@ -8,7 +8,7 @@ use std::collections::{BTreeMap, HashMap};
 
 use alloy::{
     consensus::TxType,
-    primitives::{Address, Bloom, Bytes, FixedBytes, TxHash, B256 as H256, U256},
+    primitives::{Address, Bloom, Bytes, FixedBytes, TxHash, B256, U256},
     providers::{ext::DebugApi as _, Provider as _},
     rpc::types::{
         eth::{EIP1186StorageProof as StorageProof, Transaction},
@@ -42,13 +42,13 @@ use crate::{
 type Provider = alloy::providers::RootProvider<alloy::transports::http::Http<reqwest::Client>>;
 
 /// Keccak of empty bytes.
-pub const EMPTY_HASH: H256 = FixedBytes([
+pub const EMPTY_HASH: B256 = FixedBytes([
     197, 210, 70, 1, 134, 247, 35, 60, 146, 126, 125, 178, 220, 199, 3, 192, 229, 0, 182, 83, 202,
     130, 39, 59, 123, 250, 216, 4, 93, 133, 164, 112,
 ]);
 
 /// 0x56e81f171bcc55a6ff8345e692c0f86e5b48e01b996cadc001622fb5e363b421
-const EMPTY_TRIE_HASH: H256 = FixedBytes([
+const EMPTY_TRIE_HASH: B256 = FixedBytes([
     86, 232, 31, 23, 27, 204, 85, 166, 255, 131, 69, 230, 146, 192, 248, 110, 91, 72, 224, 27, 153,
     108, 173, 192, 1, 98, 47, 181, 227, 99, 180, 33,
 ]);
@@ -66,10 +66,10 @@ struct PartialTrieState {
 /// Get the proof for an account + storage locations at a given block number.
 pub async fn get_proof(
     address: Address,
-    locations: Vec<H256>,
+    locations: Vec<B256>,
     block_number: u64,
     provider: &Provider,
-) -> anyhow::Result<(Vec<Bytes>, Vec<StorageProof>, H256, bool)> {
+) -> anyhow::Result<(Vec<Bytes>, Vec<StorageProof>, B256, bool)> {
     // tracing::info!("Proof {:?}: {:?} {:?}", block_number, address, locations);
     // println!("Proof {:?}: {:?} {:?}", block_number, address, locations);
     let proof = provider.get_proof(address, locations, block_number.into());
@@ -105,7 +105,7 @@ fn tracing_options_diff() -> GethDebugTracingOptions {
 
 /// Hash map from code hash to code.
 /// Add the empty code hash to the map.
-fn contract_codes() -> HashMap<H256, Vec<u8>> {
+fn contract_codes() -> HashMap<B256, Vec<u8>> {
     let mut map = HashMap::new();
     map.insert(EMPTY_HASH, vec![]);
     map
@@ -119,7 +119,7 @@ pub async fn get_block_metadata(
     block_chain_id: U256,
     provider: &Provider,
     request_miner_from_clique: bool,
-) -> anyhow::Result<(BlockMetadata, H256)> {
+) -> anyhow::Result<(BlockMetadata, B256)> {
     let block = provider
         .get_block(block_number.into(), BLOCK_WITH_FULL_TRANSACTIONS)
         .await?
@@ -238,12 +238,12 @@ pub async fn gather_witness(
             for sp in next_storage_proof {
                 insert_mpt(&mut storage_mpt, sp.proof);
             }
-            storage_mpts.insert(key.into(), storage_mpt);
+            storage_mpts.insert(key, storage_mpt);
         }
         if let Some(code) = code {
             let code = hex::decode(&code[2..])?;
             let codehash = keccak(&code);
-            contract_codes.insert(codehash.into(), code);
+            contract_codes.insert(codehash, code);
         }
     }
 
@@ -503,7 +503,7 @@ pub async fn gather_witness(
     Ok(proof_gen_ir)
 }
 
-fn create_fully_hashed_out_trie_from_hash(h: H256) -> HashedPartialTrie {
+fn create_fully_hashed_out_trie_from_hash(h: B256) -> HashedPartialTrie {
     let h = crate::utils::compat::h256(h);
     let mut trie = HashedPartialTrie::default();
     trie.insert(Nibbles::default(), h).unwrap();

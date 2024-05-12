@@ -1,6 +1,6 @@
 use std::{collections::HashMap, iter::empty};
 
-use alloy::primitives::{Address, B256 as H256, U256};
+use alloy::primitives::{Address, B256, U256};
 use evm_arithmetization::{
     generation::{mpt::AccountRlp, TrieInputs},
     proof::{BlockHashes, BlockMetadata, ExtraBlockData, TrieRoots},
@@ -231,6 +231,6 @@ fn create_fully_hashed_out_sub_partial_trie(trie: &HashedPartialTrie) -> HashedP
     create_trie_subset(trie, empty::<Nibbles>()).unwrap()
 }
 
-fn hash(bytes: &[u8]) -> H256 {
-    H256::from(keccak(bytes))
+fn hash(bytes: &[u8]) -> B256 {
+    B256::from(keccak(bytes))
 }

@@ -4,7 +4,7 @@ use std::{
 };
 
 use alloy::{
-    primitives::{Address, Bytes, FixedBytes, B256 as H256, U256},
+    primitives::{Address, Bytes, FixedBytes, B256, U256},
     rlp::Decodable,
     rpc::types::trace::geth::{AccountState, GethTrace, PreStateFrame},
 };
@@ -22,11 +22,11 @@ pub struct MptNode(Vec<u8>);
 
 #[derive(Default)]
 pub struct Mpt {
-    pub mpt: HashMap<H256, MptNode>,
-    pub root: H256,
+    pub mpt: HashMap<B256, MptNode>,
+    pub root: B256,
 }
 
-const EMPTY_TRIE_HASH: H256 = FixedBytes([
+const EMPTY_TRIE_HASH: B256 = FixedBytes([
     86, 232, 31, 23, 27, 204, 85, 166, 255, 131, 69, 230, 146, 192, 248, 110, 91, 72, 224, 27, 153,
     108, 173, 192, 1, 98, 47, 181, 227, 99, 180, 33,
 ]);
@@ -35,7 +35,7 @@ impl Mpt {
     pub fn new() -> Self {
         Self {
             mpt: HashMap::new(),
-            root: H256::default(),
+            root: B256::default(),
         }
     }
 
@@ -48,7 +48,7 @@ impl Mpt {
         }
     }
 
-    fn to_partial_trie_helper(&self, root: H256) -> HashedPartialTrie {
+    fn to_partial_trie_helper(&self, root: B256) -> HashedPartialTrie {
         let node = self.mpt.get(&root);
         let data = if let Some(mpt_node) = node {
             mpt_node.0.clone()
@@ -66,7 +66,7 @@ impl Mpt {
                         continue;
                     }
                     children.push(Arc::new(Box::new(
-                        self.to_partial_trie_helper(H256::from_slice(it)),
+                        self.to_partial_trie_helper(B256::from_slice(it)),
                     )));
                 }
                 Node::Branch {
@@ -81,7 +81,7 @@ impl Mpt {
                     Node::Extension {
                         nibbles: ext_prefix,
                         child: Arc::new(Box::new(
-                            self.to_partial_trie_helper(H256::from_slice(&a[1])),
+                            self.to_partial_trie_helper(B256::from_slice(&a[1])),
                         )),
                     }
                     .into()
@@ -100,7 +100,7 @@ impl Mpt {
                     Node::Extension {
                         nibbles: ext_prefix,
                         child: Arc::new(Box::new(
-                            self.to_partial_trie_helper(H256::from_slice(&a[1])),
+                            self.to_partial_trie_helper(B256::from_slice(&a[1])),
                         )),
                     }
                     .into()
@@ -139,7 +139,7 @@ pub fn insert_mpt(mpt: &mut Mpt, proof: Vec<Bytes>) {
 
 fn insert_mpt_helper(mpt: &mut Mpt, rlp_node: Bytes) {
     mpt.mpt
-        .insert(FixedBytes(keccak(&rlp_node)), MptNode(rlp_node.to_vec()));
+        .insert(keccak(&rlp_node), MptNode(rlp_node.to_vec()));
     let a = <Vec<Vec<u8>> as alloy::rlp::Decodable>::decode(&mut &rlp_node[..]).unwrap();
     if a.len() == 2 {
         let prefix = a[0].clone();
@@ -151,7 +151,7 @@ fn insert_mpt_helper(mpt: &mut Mpt, rlp_node: Bytes) {
                 &[&*nibbles.to_hex_prefix_encoding(is_leaf), &a[1]],
                 &mut node,
             );
-            mpt.mpt.insert(FixedBytes(keccak(&node)), MptNode(node));
+            mpt.mpt.insert(keccak(&node), MptNode(node));
             if nibbles.is_empty() {
                 break;
             }
@@ -181,20 +181,18 @@ fn nibbles_from_hex_prefix_encoding(b: &[u8]) -> Nibbles {
 
 pub fn apply_diffs(
     mut mpt: HashedPartialTrie,
-    mut storage: HashMap<H256, HashedPartialTrie>,
-    contract_code: &mut HashMap<H256, Vec<u8>>,
+    mut storage: HashMap<B256, HashedPartialTrie>,
+    contract_code: &mut HashMap<B256, Vec<u8>>,
     trace: GethTrace,
-) -> (HashedPartialTrie, HashMap<H256, HashedPartialTrie>) {
+) -> (HashedPartialTrie, HashMap<B256, HashedPartialTrie>) {
     let GethTrace::PreStateTracer(PreStateFrame::Diff(diff)) = trace else {
         panic!();
     };
 
     let empty_node = HashedPartialTrie::from(Node::Empty);
 
-    let tokk = |k: H256| Nibbles::from_bytes_be(&keccak(k.0)).unwrap();
-
     for (addr, old) in &diff.pre {
-        let key = FixedBytes(keccak(addr.0));
+        let key = keccak(addr.0);
         if !diff.post.contains_key(addr) {
             storage.remove(&key);
         } else {
@@ -206,21 +204,21 @@ pub fn apply_diffs(
             for (k, v) in &old.storage {
                 if !new.storage.contains_key(k) {
                     // dbg!(format!("Del {:?} {:?}", addr, k));
-                    trie.delete(tokk(*k)).unwrap();
+                    trie.delete(b256_2nibbles(*k)).unwrap();
                     // println!("Done Del {:?} {:?}", addr, k);
                 } else {
-                    let sanity = trie.get(tokk(*k)).unwrap();
+                    let sanity = trie.get(b256_2nibbles(*k)).unwrap();
                     let sanity = U256::decode(&mut &*sanity).unwrap();
 
                     assert_eq!(sanity, into_uint(*v));
                     let w = *new.storage.get(k).unwrap();
-                    trie.insert(tokk(*k), alloy::rlp::encode(into_uint(w)))
+                    trie.insert(b256_2nibbles(*k), alloy::rlp::encode(into_uint(w)))
                         .unwrap();
                 }
             }
             for (k, v) in &new.storage {
                 if !old.storage.contains_key(k) {
-                    trie.insert(tokk(*k), alloy::rlp::encode(into_uint(*v)))
+                    trie.insert(b256_2nibbles(*k), alloy::rlp::encode(into_uint(*v)))
                         .unwrap();
                 }
             }
@@ -229,23 +227,21 @@ pub fn apply_diffs(
     }
 
     for (addr, new) in &diff.post {
-        let key: H256 = FixedBytes(keccak(addr.0));
+        let key = keccak(addr.0);
         if !diff.pre.contains_key(addr) {
             let mut trie = HashedPartialTrie::from(Node::Empty);
             for (&k, v) in &new.storage {
-                trie.insert(tokk(k), alloy::rlp::encode(into_uint(*v)))
+                trie.insert(b256_2nibbles(k), alloy::rlp::encode(into_uint(*v)))
                     .unwrap();
             }
             storage.insert(key, trie);
         }
     }
 
-    let tok = |addr: &Address| Nibbles::from_bytes_be(&keccak(addr.0)).unwrap();
-
     // Delete accounts that are not in the post state.
     for addr in diff.pre.keys() {
         if !diff.post.contains_key(addr) {
-            mpt.delete(tok(addr)).unwrap();
+            mpt.delete(address2nibbles(*addr)).unwrap();
         }
     }
 
@@ -261,7 +257,7 @@ pub fn apply_diffs(
                     } else {
                         let code = s.split_at(2).1;
                         let bytes = hex::decode(code).unwrap();
-                        let h: H256 = FixedBytes(keccak(&bytes));
+                        let h: B256 = keccak(&bytes);
                         contract_code.insert(h, bytes);
                         h
                     }
@@ -271,16 +267,19 @@ pub fn apply_diffs(
                 nonce: acc.nonce.unwrap_or_default().into(),
                 balance: crate::utils::compat::u256(acc.balance.unwrap_or_default()),
                 storage_root: storage
-                    .get(&FixedBytes(keccak(addr.0)))
+                    .get(&(keccak(addr.0)))
                     .unwrap_or(&empty_node.clone())
                     .hash(),
                 code_hash: crate::utils::compat::h256(code_hash),
             };
-            mpt.insert(tok(addr), ethers::utils::rlp::encode(&account).to_vec()) // TODO(aatifsyed): make the required change to evm_arithmetization
-                .unwrap();
+            mpt.insert(
+                address2nibbles(*addr),
+                ethers::utils::rlp::encode(&account).to_vec(),
+            ) // TODO(aatifsyed): make the required change to evm_arithmetization
+            .unwrap();
         } else {
             let old = mpt
-                .get(tok(addr))
+                .get(address2nibbles(*addr))
                 .map(|d| ethers::utils::rlp::decode(d).unwrap())
                 .unwrap_or(AccountRlp {
                     nonce: Default::default(),
@@ -297,7 +296,7 @@ pub fn apply_diffs(
                     } else {
                         let code = s.split_at(2).1;
                         let bytes = hex::decode(code).unwrap();
-                        let h: H256 = FixedBytes(keccak(&bytes));
+                        let h = keccak(&bytes);
                         contract_code.insert(h, bytes);
                         h
                     }
@@ -311,26 +310,37 @@ pub fn apply_diffs(
                     .map(crate::utils::compat::u256)
                     .unwrap_or(old.balance),
                 storage_root: storage
-                    .get(&FixedBytes(keccak(addr.0)))
+                    .get(&(keccak(addr.0)))
                     .map(|trie| trie.hash())
                     .unwrap_or(old.storage_root),
                 code_hash,
             };
-            mpt.insert(tok(addr), ethers::utils::rlp::encode(&account).to_vec())
-                .unwrap();
+            mpt.insert(
+                address2nibbles(*addr),
+                ethers::utils::rlp::encode(&account).to_vec(),
+            )
+            .unwrap();
         }
     }
 
     (mpt, storage)
 }
 
+fn address2nibbles(addr: Address) -> Nibbles {
+    Nibbles::from_bytes_be(keccak(addr.0).as_slice()).unwrap()
+}
+
+fn b256_2nibbles(k: B256) -> Nibbles {
+    Nibbles::from_bytes_be(keccak(k.0).as_slice()).unwrap()
+}
+
 pub fn trim(
     trie: HashedPartialTrie,
-    mut storage_mpts: HashMap<H256, HashedPartialTrie>,
+    mut storage_mpts: HashMap<B256, HashedPartialTrie>,
     touched: BTreeMap<Address, AccountState>,
     has_storage_deletion: bool,
-) -> (HashedPartialTrie, HashMap<H256, HashedPartialTrie>) {
-    let tok = |addr: &Address| Nibbles::from_bytes_be(&keccak(addr.0)).unwrap();
+) -> (HashedPartialTrie, HashMap<B256, HashedPartialTrie>) {
+    let tok = |addr: &Address| Nibbles::from_bytes_be(keccak(addr.0).as_slice()).unwrap();
     let keys = touched.keys().map(tok).collect::<Vec<_>>();
     let new_state_trie = create_trie_subset(&trie, keys).unwrap();
     if has_storage_deletion {
@@ -339,7 +349,7 @@ pub fn trim(
     }
     let keys_to_addrs = touched
         .keys()
-        .map(|addr| (FixedBytes(keccak(addr.0)), *addr))
+        .map(|addr| ((keccak(addr.0)), *addr))
         .collect::<HashMap<_, _>>();
     for (k, t) in storage_mpts.iter_mut() {
         if !keys_to_addrs.contains_key(k) {
@@ -350,7 +360,7 @@ pub fn trim(
             let keys = acc
                 .storage
                 .keys()
-                .map(|slot| Nibbles::from_bytes_be(&keccak(slot.0)).unwrap())
+                .map(|slot| Nibbles::from_bytes_be(keccak(slot.0).as_slice()).unwrap())
                 .collect::<Vec<_>>();
 
             if let Ok(trie) = create_trie_subset(t, keys) {
@@ -361,7 +371,7 @@ pub fn trim(
     (new_state_trie, storage_mpts)
 }
 
-fn into_uint(hash: H256) -> U256 {
+fn into_uint(hash: B256) -> U256 {
     U256::from_be_bytes(*hash) // TODO(aatifsyed): is this
                                // right?
 }

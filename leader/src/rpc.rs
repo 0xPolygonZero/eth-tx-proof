@@ -1,4 +1,4 @@
-use alloy::primitives::{Address, B256 as H256, U256};
+use alloy::primitives::{Address, B256, U256};
 use anyhow::Context as _;
 use evm_arithmetization::proof::BlockHashes;
 use futures::{stream::FuturesOrdered, TryStreamExt};
@@ -9,9 +9,9 @@ use tracing::info;
 #[derive(Deserialize, Debug)]
 #[serde(rename_all = "camelCase")]
 struct EthGetBlockByNumberResult {
-    hash: H256,
+    hash: B256,
     number: U256,
-    parent_hash: H256,
+    parent_hash: B256,
 }
 
 #[derive(Deserialize, Debug)]
@@ -63,16 +63,16 @@ impl EthGetBlockByNumberResponse {
     async fn fetch_previous_block_hashes<U: IntoUrl + Copy>(
         rpc_url: U,
         block_number: u64,
-    ) -> anyhow::Result<Vec<H256>> {
+    ) -> anyhow::Result<Vec<B256>> {
         if block_number == 0 {
-            return Ok(vec![H256::default(); 256]);
+            return Ok(vec![B256::default(); 256]);
         }
 
         let mut hashes = Vec::with_capacity(256);
 
         let padding_delta = block_number as i64 - 256;
         if padding_delta < 0 {
-            let default = H256::default();
+            let default = B256::default();
             for _ in 0..padding_delta.abs() {
                 hashes.push(default);
             }
@@ -157,7 +157,7 @@ pub(crate) struct CliqueGetSignersAtHashResponse {
 }
 
 impl CliqueGetSignersAtHashResponse {
-    pub(crate) async fn fetch<U: IntoUrl>(rpc_url: U, b_hash: H256) -> anyhow::Result<Self> {
+    pub(crate) async fn fetch<U: IntoUrl>(rpc_url: U, b_hash: B256) -> anyhow::Result<Self> {
         let client = reqwest::Client::new();
         let b_hash_hex = format!("0x{:x}", b_hash);
         info!("Fetching clique signer for block hash {}", b_hash_hex);
