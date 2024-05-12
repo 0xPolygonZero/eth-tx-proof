@@ -1,16 +1,10 @@
 use std::collections::{BTreeMap, HashMap};
 use std::sync::Arc;
 
-use alloy::primitives::{Address, Bloom, Bytes, FixedBytes, TxHash, B256 as H256, U256};
+use alloy::primitives::{Address, Bytes, FixedBytes, B256 as H256, U256};
 use alloy::rlp::Decodable;
 use alloy::rpc::types::trace::geth::PreStateFrame;
-use alloy::rpc::types::{
-    eth::EIP1186StorageProof as StorageProof,
-    trace::geth::{
-        AccountState, GethDebugBuiltInTracerType, GethDebugTracerConfig, GethDebugTracerType,
-        GethDebugTracingOptions, GethTrace,
-    },
-};
+use alloy::rpc::types::trace::geth::{AccountState, GethTrace};
 use evm_arithmetization::generation::mpt::AccountRlp;
 use mpt_trie::nibbles::{Nibbles, NibblesIntern};
 use mpt_trie::partial_trie::PartialTrie;
@@ -58,7 +52,7 @@ impl Mpt {
         } else {
             return Node::Hash(crate::utils::compat::h256(root)).into();
         };
-        let a: Vec<Vec<u8>> = crate::rlp::decode_list2(&data);
+        let a = <Vec<Vec<u8>>>::decode(&mut &*data).unwrap();
         match a.len() {
             17 => {
                 let value = a[16].clone();
@@ -149,12 +143,12 @@ fn insert_mpt_helper(mpt: &mut Mpt, rlp_node: Bytes) {
         let is_leaf = (prefix[0] >> 4 == 2) || (prefix[0] >> 4 == 3);
         let mut nibbles = nibbles_from_hex_prefix_encoding(&prefix);
         loop {
-            let node = rlp::encode_list::<Vec<u8>, _>(&[
-                nibbles.to_hex_prefix_encoding(is_leaf).to_vec(),
-                a[1].clone(),
-            ]);
-            mpt.mpt
-                .insert(FixedBytes(keccak(&node)), MptNode(node.to_vec()));
+            let mut node = vec![];
+            alloy::rlp::encode_list::<_, [u8]>(
+                &[&*nibbles.to_hex_prefix_encoding(is_leaf), &a[1]],
+                &mut node,
+            );
+            mpt.mpt.insert(FixedBytes(keccak(&node)), MptNode(node));
             if nibbles.is_empty() {
                 break;
             }
@@ -213,16 +207,17 @@ pub fn apply_diffs(
                     // println!("Done Del {:?} {:?}", addr, k);
                 } else {
                     let sanity = trie.get(tokk(*k)).unwrap();
-                    let sanity = U256::decode(&mut sanity).unwrap();
-                    assert_eq!(sanity, v.into_uint());
+                    let sanity = U256::decode(&mut &*sanity).unwrap();
+
+                    assert_eq!(sanity, into_uint(*v));
                     let w = *new.storage.get(k).unwrap();
-                    trie.insert(tokk(k), rlp::encode(&w.into_uint()).to_vec())
+                    trie.insert(tokk(*k), alloy::rlp::encode(into_uint(w)))
                         .unwrap();
                 }
             }
             for (k, v) in &new.storage {
-                if !old.storage.clone().unwrap_or_default().contains_key(&k) {
-                    trie.insert(tokk(k), rlp::encode(&v.into_uint()).to_vec())
+                if !old.storage.contains_key(k) {
+                    trie.insert(tokk(*k), alloy::rlp::encode(into_uint(*v)))
                         .unwrap();
                 }
             }
@@ -231,11 +226,11 @@ pub fn apply_diffs(
     }
 
     for (addr, new) in &diff.post {
-        let key = H256(keccak(addr.0));
+        let key: H256 = FixedBytes(keccak(addr.0));
         if !diff.pre.contains_key(addr) {
             let mut trie = HashedPartialTrie::from(Node::Empty);
-            for (&k, v) in &new.storage.clone().unwrap_or_default() {
-                trie.insert(tokk(k), rlp::encode(&v.into_uint()).to_vec())
+            for (&k, v) in &new.storage {
+                trie.insert(tokk(k), alloy::rlp::encode(into_uint(*v)))
                     .unwrap();
             }
             storage.insert(key, trie);
@@ -263,32 +258,32 @@ pub fn apply_diffs(
                     } else {
                         let code = s.split_at(2).1;
                         let bytes = hex::decode(code).unwrap();
-                        let h = H256(keccak(&bytes));
+                        let h: H256 = FixedBytes(keccak(&bytes));
                         contract_code.insert(h, bytes);
                         h
                     }
                 })
                 .unwrap_or(EMPTY_HASH);
             let account = AccountRlp {
-                nonce: acc.nonce.unwrap_or(U256::zero()),
-                balance: acc.balance.unwrap_or(U256::zero()),
+                nonce: acc.nonce.unwrap_or_default().into(),
+                balance: crate::utils::compat::u256(acc.balance.unwrap_or_default()),
                 storage_root: storage
-                    .get(&H256(keccak(addr.0)))
+                    .get(&FixedBytes(keccak(addr.0)))
                     .unwrap_or(&empty_node.clone())
                     .hash(),
-                code_hash,
+                code_hash: crate::utils::compat::h256(code_hash),
             };
-            mpt.insert(tok(addr), rlp::encode(&account).to_vec())
+            mpt.insert(tok(addr), ethers::utils::rlp::encode(&account).to_vec()) // TODO(aatifsyed): make the required change to evm_arithmetization
                 .unwrap();
         } else {
             let old = mpt
                 .get(tok(addr))
-                .map(|d| rlp::decode(d).unwrap())
+                .map(|d| ethers::utils::rlp::decode(d).unwrap())
                 .unwrap_or(AccountRlp {
-                    nonce: U256::zero(),
-                    balance: U256::zero(),
+                    nonce: Default::default(),
+                    balance: Default::default(),
                     storage_root: empty_node.hash(),
-                    code_hash: EMPTY_HASH,
+                    code_hash: crate::utils::compat::h256(EMPTY_HASH),
                 });
             let code_hash = acc
                 .code
@@ -299,22 +294,26 @@ pub fn apply_diffs(
                     } else {
                         let code = s.split_at(2).1;
                         let bytes = hex::decode(code).unwrap();
-                        let h = H256(keccak(&bytes));
+                        let h: H256 = FixedBytes(keccak(&bytes));
                         contract_code.insert(h, bytes);
                         h
                     }
                 })
+                .map(crate::utils::compat::h256)
                 .unwrap_or(old.code_hash);
             let account = AccountRlp {
-                nonce: acc.nonce.unwrap_or(old.nonce),
-                balance: acc.balance.unwrap_or(old.balance),
+                nonce: acc.nonce.map(Into::into).unwrap_or(old.nonce),
+                balance: acc
+                    .balance
+                    .map(crate::utils::compat::u256)
+                    .unwrap_or(old.balance),
                 storage_root: storage
-                    .get(&H256(keccak(addr.0)))
+                    .get(&FixedBytes(keccak(addr.0)))
                     .map(|trie| trie.hash())
                     .unwrap_or(old.storage_root),
                 code_hash,
             };
-            mpt.insert(tok(addr), rlp::encode(&account).to_vec())
+            mpt.insert(tok(addr), ethers::utils::rlp::encode(&account).to_vec())
                 .unwrap();
         }
     }
@@ -337,7 +336,7 @@ pub fn trim(
     }
     let keys_to_addrs = touched
         .keys()
-        .map(|addr| (H256(keccak(addr.0)), *addr))
+        .map(|addr| (FixedBytes(keccak(addr.0)), *addr))
         .collect::<HashMap<_, _>>();
     for (k, t) in storage_mpts.iter_mut() {
         if !keys_to_addrs.contains_key(k) {
@@ -347,8 +346,6 @@ pub fn trim(
             let acc = touched.get(addr).unwrap();
             let keys = acc
                 .storage
-                .clone()
-                .unwrap_or_default()
                 .keys()
                 .map(|slot| Nibbles::from_bytes_be(&keccak(slot.0)).unwrap())
                 .collect::<Vec<_>>();
@@ -359,4 +356,9 @@ pub fn trim(
         }
     }
     (new_state_trie, storage_mpts)
+}
+
+fn into_uint(hash: H256) -> U256 {
+    U256::from_be_bytes(*hash) // TODO(aatifsyed): is this
+                               // right?
 }
