@@ -26,18 +26,33 @@ pub fn has_storage_deletion(trace: &GethTrace) -> bool {
     }
     false
 }
-
+/// This crate wants to use [`alloy`], but [`evm_arithmetization`] uses
+/// [`ethers`] etc. Migrating our dependencies is tracked by TODO(aatifsyed)
 pub mod compat {
-    pub fn h256(_: alloy::primitives::B256) -> primitive_types::H256 {
-        todo!()
+    use std::array;
+
+    use alloy::primitives::FixedBytes;
+
+    pub fn h256(FixedBytes(it): alloy::primitives::B256) -> primitive_types::H256 {
+        primitive_types::H256(it)
     }
-    pub fn address(_: alloy::primitives::Address) -> ethers::types::Address {
-        todo!()
+    pub fn address(
+        alloy::primitives::Address(FixedBytes(it)): alloy::primitives::Address,
+    ) -> ethers::types::Address {
+        primitive_types::H160(it)
     }
-    pub fn u256(_: alloy::primitives::U256) -> primitive_types::U256 {
-        todo!()
+    pub fn u256(it: alloy::primitives::U256) -> primitive_types::U256 {
+        primitive_types::U256::from_big_endian(&it.to_be_bytes::<32>())
     }
-    pub fn bloom(_: alloy::primitives::Bloom) -> [primitive_types::U256; 8] {
-        todo!()
+    pub fn bloom(
+        alloy::primitives::Bloom(FixedBytes(it)): alloy::primitives::Bloom,
+    ) -> [primitive_types::U256; 8] {
+        // have 8 * 256, want 256 * 8, (no unsafe, no unstable)
+        // TODO(aatifsyed): we're going from unintepreted bytes to an integer type
+        //                  is this right?
+        let mut chunks = it.chunks_exact(32);
+        array::from_fn(|_ix| {
+            primitive_types::U256::from(<[u8; 32]>::try_from(chunks.next().unwrap()).unwrap())
+        })
     }
 }
