@@ -211,7 +211,7 @@ pub async fn gather_witness(
                 state.insert(address, account);
             }
         }
-        txn_rlps.push(rlp::transaction(&txn));
+        txn_rlps.push(rlp::transaction(txn.clone()));
         txns_info.push(txn);
     }
 
@@ -366,18 +366,18 @@ pub async fn gather_witness(
         let mut new_txns_mpt = txns_mpt.clone();
         new_txns_mpt
             .insert(
-                Nibbles::from_bytes_be(&rlp::option_u64(&receipt.transaction_index)).unwrap(),
+                Nibbles::from_bytes_be(&rlp::option(receipt.transaction_index.as_ref())).unwrap(),
                 signed_txn.clone(),
             )
             .unwrap();
         let mut new_receipts_mpt = receipts_mpt.clone();
-        let mut bytes = rlp::transaction_receipt(&receipt);
+        let mut bytes = rlp::transaction_receipt(receipt.clone());
         if !matches!(receipt.transaction_type(), TxType::Legacy) {
             bytes.insert(0, receipt.transaction_type() as u8);
         }
         new_receipts_mpt
             .insert(
-                Nibbles::from_bytes_be(&rlp::option_u64(&receipt.transaction_index)).unwrap(),
+                Nibbles::from_bytes_be(&rlp::option(receipt.transaction_index.as_ref())).unwrap(),
                 bytes,
             )
             .unwrap();
@@ -512,19 +512,128 @@ fn create_fully_hashed_out_trie_from_hash(h: B256) -> HashedPartialTrie {
 }
 
 pub mod rlp {
-    use alloy::rpc::types::eth::TransactionReceipt;
+    use alloy::consensus::{Receipt, ReceiptEnvelope, TxEip1559, TxEip2930, TxEip4844, TxLegacy};
+    use alloy::rpc::types::eth::{ReceiptWithBloom, TransactionReceipt};
 
     use super::*;
 
-    pub fn transaction(_: &Transaction) -> Vec<u8> {
-        todo!()
+    /// # Panics
+    /// - liberally
+    pub fn transaction(rpc: Transaction) -> Vec<u8> {
+        let Transaction {
+            hash: _,
+            nonce,
+            block_hash: _,
+            block_number: _,
+            transaction_index: _,
+            from: _,
+            to,
+            value,
+            gas_price,
+            gas,
+            max_fee_per_gas,
+            max_priority_fee_per_gas,
+            max_fee_per_blob_gas,
+            input,
+            signature: _,
+            chain_id,
+            blob_versioned_hashes,
+            access_list,
+            transaction_type,
+            other: _,
+        } = rpc;
+        // Field mappings are cribbed from the TryFrom<Transaction> for Signed<...>
+        // implementations.
+        // This informs e.g panicking vs filling access lists
+        match transaction_type {
+            None | Some(0) => alloy::rlp::encode(TxLegacy {
+                chain_id,
+                nonce,
+                gas_price: gas_price.unwrap(),
+                gas_limit: gas,
+                to: to.into(),
+                value,
+                input,
+            }),
+            Some(1) => alloy::rlp::encode(TxEip2930 {
+                chain_id: chain_id.unwrap(),
+                nonce,
+                gas_price: gas_price.unwrap(),
+                gas_limit: gas,
+                to: to.into(),
+                value,
+                access_list: access_list.unwrap(),
+                input,
+            }),
+            Some(2) => alloy::rlp::encode(TxEip1559 {
+                chain_id: chain_id.unwrap(),
+                nonce,
+                gas_limit: gas,
+                max_fee_per_gas: max_fee_per_gas.unwrap(),
+                max_priority_fee_per_gas: max_priority_fee_per_gas.unwrap(),
+                to: to.into(),
+                value,
+                access_list: access_list.unwrap_or_default(),
+                input,
+            }),
+            Some(3) => alloy::rlp::encode(TxEip4844 {
+                chain_id: chain_id.unwrap(),
+                nonce,
+                gas_limit: gas,
+                max_fee_per_gas: max_fee_per_gas.unwrap(),
+                max_priority_fee_per_gas: max_priority_fee_per_gas.unwrap(),
+                to: to.unwrap(),
+                value,
+                access_list: access_list.unwrap_or_default(),
+                blob_versioned_hashes: blob_versioned_hashes.unwrap(),
+                max_fee_per_blob_gas: max_fee_per_blob_gas.unwrap(),
+                input,
+            }),
+            Some(other) => panic!("unknown transaction type : {}", other),
+        }
     }
-    pub fn transaction_receipt(_: &TransactionReceipt) -> Vec<u8> {
-        todo!()
+    /// # Panics
+    /// - On unknown receipt types
+    pub fn transaction_receipt(rpc: TransactionReceipt) -> Vec<u8> {
+        // TODO(aatifsyed): is this right?
+        alloy::rlp::encode(map_receipt_envelope(rpc.inner))
     }
-    pub fn option_u64(it: &Option<u64>) -> Vec<u8> {
+    fn map_receipt_envelope(
+        rpc: ReceiptEnvelope<alloy::rpc::types::eth::Log>,
+    ) -> ReceiptEnvelope<alloy::primitives::Log> {
+        match rpc {
+            ReceiptEnvelope::Legacy(it) => ReceiptEnvelope::Legacy(map_receipt_with_bloom(it)),
+            ReceiptEnvelope::Eip2930(it) => ReceiptEnvelope::Eip2930(map_receipt_with_bloom(it)),
+            ReceiptEnvelope::Eip1559(it) => ReceiptEnvelope::Eip1559(map_receipt_with_bloom(it)),
+            ReceiptEnvelope::Eip4844(it) => ReceiptEnvelope::Eip4844(map_receipt_with_bloom(it)),
+            other => panic!("unsupported receipt type: {:?}", other),
+        }
+    }
+    fn map_receipt_with_bloom(
+        rpc: ReceiptWithBloom<alloy::rpc::types::eth::Log>,
+    ) -> ReceiptWithBloom<alloy::primitives::Log> {
+        let ReceiptWithBloom {
+            receipt:
+                Receipt {
+                    status,
+                    cumulative_gas_used,
+                    logs,
+                },
+            logs_bloom,
+        } = rpc;
+        ReceiptWithBloom {
+            receipt: Receipt {
+                status,
+                cumulative_gas_used,
+                logs: logs.into_iter().map(|it| it.inner).collect(),
+            },
+            logs_bloom,
+        }
+    }
+    pub fn option<T: alloy::rlp::Encodable>(it: Option<T>) -> Vec<u8> {
+        // ethers encodes options as a list of a single element.
         let mut v = vec![];
-        alloy::rlp::encode_list(it.as_slice(), &mut v);
+        alloy::rlp::encode_list::<_, T>(it.as_slice(), &mut v);
         v
     }
 }
