@@ -238,14 +238,14 @@ pub async fn gather_witness(
         let (proof, storage_proof, storage_hash, _account_is_empty) = get_proof(
             *address,
             storage_keys.clone(),
-            (block_number - 1).into(),
+            block_number - 1,
             provider,
         )
         .await?;
         insert_mpt(&mut state_mpt, proof);
 
         let (next_proof, next_storage_proof, _next_storage_hash, _next_account_is_empty) =
-            get_proof(*address, storage_keys, block_number.into(), provider).await?;
+            get_proof(*address, storage_keys, block_number, provider).await?;
         insert_mpt(&mut state_mpt, next_proof);
 
         let key = keccak(address.0);
@@ -285,14 +285,14 @@ pub async fn gather_witness(
                 let (proof, storage_proof, _storage_hash, _account_is_empty) = get_proof(
                     address,
                     storage_keys.clone(),
-                    (block_number - 1).into(),
+                    block_number - 1,
                     provider,
                 )
                 .await?;
                 insert_mpt(&mut state_mpt, proof);
 
                 let (next_proof, next_storage_proof, _next_storage_hash, _next_account_is_empty) =
-                    get_proof(address, storage_keys, block_number.into(), provider).await?;
+                    get_proof(address, storage_keys, block_number, provider).await?;
                 insert_mpt(&mut state_mpt, next_proof);
 
                 let key = keccak(address.0);
@@ -314,7 +314,7 @@ pub async fn gather_witness(
     if let Some(v) = &block.withdrawals {
         for w in v {
             let (proof, _storage_proof, _storage_hash, _account_is_empty) =
-                get_proof(w.address, vec![], (block_number - 1).into(), provider).await?;
+                get_proof(w.address, vec![], block_number - 1, provider).await?;
             insert_mpt(&mut state_mpt, proof);
         }
     }
@@ -345,7 +345,7 @@ pub async fn gather_witness(
 
     // Block hashes
     let block_hashes =
-        get_block_hashes(block_number, provider.client().transport().url().as_ref()).await?;
+        get_block_hashes(block_number, provider.client().transport().url()).await?;
 
     let mut storage_mpts: HashMap<_, _> = storage_mpts
         .iter()
