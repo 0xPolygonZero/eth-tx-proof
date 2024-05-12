@@ -5,13 +5,12 @@ use ops::register;
 use paladin::runtime::Runtime;
 mod init;
 
-use std::io::{Read, Write};
+use std::fs::File;
 
 use anyhow::Result;
 use clap::Parser;
 use common::prover_state::set_prover_state_from_config;
 use dotenvy::dotenv;
-use evm_arithmetization::GenerationInputs;
 use leader::gather_witness;
 
 #[tokio::main]
@@ -30,7 +29,7 @@ async fn main() -> Result<()> {
             let provider = alloy::providers::RootProvider::new_http(rpc_url);
             let gen_inputs =
                 gather_witness(transaction_hash, &provider, request_miner_from_clique).await?;
-            std::io::stdout().write_all(&serde_json::to_vec(&gen_inputs)?)?;
+            println!("{}", serde_json::to_string(&gen_inputs)?);
         }
         Command::Prove {
             input_witness,
@@ -47,14 +46,12 @@ async fn main() -> Result<()> {
                 }
             }
 
-            let mut file = std::fs::File::open(&input_witness)?;
-            let mut buffer = String::new();
-            file.read_to_string(&mut buffer)?;
-            let proof_gen_ir: Vec<GenerationInputs> = serde_json::from_str(&buffer)?;
-            let prover_input = prover::ProverInput { proof_gen_ir };
+            let prover_input = prover::ProverInput {
+                proof_gen_ir: serde_json::from_reader(File::open(input_witness)?)?,
+            };
             let runtime = Runtime::from_config(&paladin, register()).await?;
             let proof = prover_input.prove(&runtime, None).await?;
-            std::io::stdout().write_all(&serde_json::to_vec(&proof)?)?;
+            println!("{}", serde_json::to_string(&proof)?);
             runtime.close().await?;
         }
     }
