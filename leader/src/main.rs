@@ -1,11 +1,9 @@
-use std::convert::TryFrom;
 use std::io::{Read, Write};
 
 use anyhow::Result;
 use clap::Parser;
 use common::prover_state::set_prover_state_from_config;
 use dotenvy::dotenv;
-use ethers::prelude::*;
 use evm_arithmetization::GenerationInputs;
 use leader::gather_witness;
 
@@ -29,8 +27,7 @@ async fn main() -> Result<()> {
             transaction_hash,
             request_miner_from_clique,
         } => {
-            let provider = Provider::<Http>::try_from(&rpc_url)?;
-
+            let provider = alloy::providers::RootProvider::new_http(rpc_url);
             let gen_inputs =
                 gather_witness(transaction_hash, &provider, request_miner_from_clique).await?;
             std::io::stdout().write_all(&serde_json::to_vec(&gen_inputs)?)?;

@@ -1,8 +1,8 @@
 use std::path::PathBuf;
 
+use alloy::primitives::TxHash;
 use clap::{Parser, Subcommand, ValueHint};
 use common::prover_state::cli::CliProverStateConfig;
-use ethers::types::TxHash;
 
 #[derive(Parser)]
 pub struct Cli {
@@ -16,7 +16,7 @@ pub enum Command {
     Rpc {
         /// The RPC URL.
         #[arg(long, short = 'u', value_hint = ValueHint::Url, env = "RPC_URL")]
-        rpc_url: String,
+        rpc_url: reqwest::Url,
         /// The transaction hash from which to generate the witness.
         #[arg(long, short)]
         transaction_hash: TxHash,

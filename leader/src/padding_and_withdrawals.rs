@@ -1,9 +1,6 @@
 use std::{collections::HashMap, iter::empty};
 
-use ethers::{
-    types::{Address, H256, U256},
-    utils::rlp,
-};
+use alloy::primitives::{Address, B256 as H256, U256};
 use evm_arithmetization::{
     generation::{mpt::AccountRlp, TrieInputs},
     proof::{BlockHashes, BlockMetadata, ExtraBlockData, TrieRoots},
@@ -97,7 +94,7 @@ pub(crate) fn add_withdrawals_to_txns(
 
     let withdrawals_with_hashed_addrs_iter = withdrawals
         .iter()
-        .map(|(addr, v)| (*addr, hash(addr.as_bytes()), *v));
+        .map(|(addr, v)| (*addr, crate::utils::compat::h256(hash(addr.as_slice())), *v));
 
     update_trie_state_from_withdrawals(
         withdrawals_with_hashed_addrs_iter,
@@ -108,7 +105,15 @@ pub(crate) fn add_withdrawals_to_txns(
         .last_mut()
         .expect("We cannot have an empty list of payloads.");
 
-    last_inputs.withdrawals = withdrawals;
+    last_inputs.withdrawals = withdrawals
+        .into_iter()
+        .map(|(l, r)| {
+            (
+                crate::utils::compat::address(l),
+                crate::utils::compat::u256(r),
+            )
+        })
+        .collect();
     last_inputs.trie_roots_after.state_root = final_trie_state.state.hash();
 }
 
@@ -123,12 +128,12 @@ fn update_trie_state_from_withdrawals<'a>(
 
         let acc_bytes = state.get(h_addr_nibs).unwrap();
 
-        let mut acc_data = rlp::decode::<AccountRlp>(acc_bytes).unwrap();
+        let mut acc_data = ethers::utils::rlp::decode::<AccountRlp>(acc_bytes).unwrap();
 
-        acc_data.balance += amt;
+        acc_data.balance += crate::utils::compat::u256(amt);
 
         state
-            .insert(h_addr_nibs, rlp::encode(&acc_data).to_vec())
+            .insert(h_addr_nibs, ethers::utils::rlp::encode(&acc_data).to_vec())
             .unwrap();
     }
 }

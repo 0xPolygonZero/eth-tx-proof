@@ -298,9 +298,7 @@ pub async fn gather_witness(
                 let key = keccak(address.0);
                 if !empty_storage {
                     let mut storage_mpt = Mpt::new();
-                    let storage_mpt = storage_mpts
-                        .get_mut(&key.into())
-                        .unwrap_or(&mut storage_mpt);
+                    let storage_mpt = storage_mpts.get_mut(&key).unwrap_or(&mut storage_mpt);
                     for sp in storage_proof {
                         insert_mpt(storage_mpt, sp.proof);
                     }
@@ -339,7 +337,7 @@ pub async fn gather_witness(
     // Withdrawals
     let wds = if let Some(v) = &block.withdrawals {
         v.iter()
-            .map(|w| (w.address, w.amount * 1_000_000_000)) // Alchemy returns Gweis for some reason
+            .map(|w| (w.address, U256::from(w.amount * 1_000_000_000))) // Alchemy returns Gweis for some reason
             .collect()
     } else {
         vec![]
@@ -456,7 +454,7 @@ pub async fn gather_witness(
 
         state_mpt = next_state_mpt;
         storage_mpts = next_storage_mpts;
-        gas_used += receipt.gas_used.into();
+        gas_used += U256::from(receipt.gas_used);
         assert_eq!(gas_used, U256::from(receipt.inner.cumulative_gas_used()));
         bloom = new_bloom;
         txns_mpt = new_txns_mpt;
