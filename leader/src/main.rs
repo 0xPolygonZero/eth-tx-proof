@@ -1,3 +1,10 @@
+mod cli;
+mod prover;
+use cli::Command;
+use ops::register;
+use paladin::runtime::Runtime;
+mod init;
+
 use std::io::{Read, Write};
 
 use anyhow::Result;
@@ -6,13 +13,6 @@ use common::prover_state::set_prover_state_from_config;
 use dotenvy::dotenv;
 use evm_arithmetization::GenerationInputs;
 use leader::gather_witness;
-
-mod cli;
-mod prover;
-use cli::Command;
-use ops::register;
-use paladin::runtime::Runtime;
-mod init;
 
 #[tokio::main]
 async fn main() -> Result<()> {

@@ -1,18 +1,21 @@
-use std::collections::{BTreeMap, HashMap};
-use std::sync::Arc;
+use std::{
+    collections::{BTreeMap, HashMap},
+    sync::Arc,
+};
 
-use alloy::primitives::{Address, Bytes, FixedBytes, B256 as H256, U256};
-use alloy::rlp::Decodable;
-use alloy::rpc::types::trace::geth::PreStateFrame;
-use alloy::rpc::types::trace::geth::{AccountState, GethTrace};
+use alloy::{
+    primitives::{Address, Bytes, FixedBytes, B256 as H256, U256},
+    rlp::Decodable,
+    rpc::types::trace::geth::{AccountState, GethTrace, PreStateFrame},
+};
 use evm_arithmetization::generation::mpt::AccountRlp;
-use mpt_trie::nibbles::{Nibbles, NibblesIntern};
-use mpt_trie::partial_trie::PartialTrie;
-use mpt_trie::partial_trie::{HashedPartialTrie, Node};
-use mpt_trie::trie_subsets::create_trie_subset;
+use mpt_trie::{
+    nibbles::{Nibbles, NibblesIntern},
+    partial_trie::{HashedPartialTrie, Node, PartialTrie},
+    trie_subsets::create_trie_subset,
+};
 
-use crate::utils::keccak;
-use crate::EMPTY_HASH;
+use crate::{utils::keccak, EMPTY_HASH};
 
 #[derive(Clone, Debug)]
 pub struct MptNode(Vec<u8>);
@@ -57,13 +60,13 @@ impl Mpt {
             17 => {
                 let value = a[16].clone();
                 let mut children = vec![];
-                for i in 0..16 {
-                    if a[i].is_empty() {
+                for it in a.iter().take(16) {
+                    if it.is_empty() {
                         children.push(Node::Empty.into());
                         continue;
                     }
                     children.push(Arc::new(Box::new(
-                        self.to_partial_trie_helper(H256::from_slice(&a[i])),
+                        self.to_partial_trie_helper(H256::from_slice(it)),
                     )));
                 }
                 Node::Branch {
@@ -120,9 +123,9 @@ impl Mpt {
                     }
                     .into()
                 }
-                _ => panic!("wtf?"),
+                other => panic!("unexpected value {}", other),
             },
-            _ => panic!("wtf?"),
+            other => panic!("unexpected length: {}", other),
         }
     }
 }
@@ -172,7 +175,7 @@ fn nibbles_from_hex_prefix_encoding(b: &[u8]) -> Nibbles {
             }
             // Nibbles::from_bytes_be(&b).unwrap()
         }
-        _ => panic!("wtf?"),
+        other => panic!("unexpected value: {}", other),
     }
 }
 

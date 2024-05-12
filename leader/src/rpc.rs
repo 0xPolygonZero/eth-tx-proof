@@ -1,5 +1,5 @@
 use alloy::primitives::{Address, B256 as H256, U256};
-use anyhow::Context;
+use anyhow::Context as _;
 use evm_arithmetization::proof::BlockHashes;
 use futures::{stream::FuturesOrdered, TryStreamExt};
 use reqwest::IntoUrl;

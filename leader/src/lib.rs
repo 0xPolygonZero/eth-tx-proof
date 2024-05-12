@@ -1,43 +1,42 @@
-#![allow(clippy::needless_range_loop)]
-
 pub mod cli;
 pub mod mpt;
+mod padding_and_withdrawals;
 mod rpc;
 pub mod utils;
 
-mod padding_and_withdrawals;
-
 use std::collections::{BTreeMap, HashMap};
 
-use alloy::consensus::TxType;
-use alloy::primitives::{Address, Bloom, Bytes, FixedBytes, TxHash, B256 as H256, U256};
-use alloy::providers::{ext::DebugApi as _, Provider as _};
-use alloy::rpc::types::eth::Transaction;
-use alloy::rpc::types::trace::geth::{DiffMode, PreStateFrame, PreStateMode};
-use alloy::rpc::types::{
-    eth::EIP1186StorageProof as StorageProof,
-    trace::geth::{
-        AccountState, GethDebugBuiltInTracerType, GethDebugTracerConfig, GethDebugTracerType,
-        GethDebugTracingOptions, GethTrace,
+use alloy::{
+    consensus::TxType,
+    primitives::{Address, Bloom, Bytes, FixedBytes, TxHash, B256 as H256, U256},
+    providers::{ext::DebugApi as _, Provider as _},
+    rpc::types::{
+        eth::{EIP1186StorageProof as StorageProof, Transaction},
+        trace::geth::{
+            AccountState, DiffMode, GethDebugBuiltInTracerType, GethDebugTracerType,
+            GethDebugTracingOptions, GethTrace, PreStateFrame, PreStateMode,
+        },
     },
 };
-use anyhow::{anyhow, Result};
-use evm_arithmetization::generation::{GenerationInputs, TrieInputs};
-use evm_arithmetization::proof::TrieRoots;
-use evm_arithmetization::proof::{BlockMetadata, ExtraBlockData};
-use itertools::izip;
-use mpt_trie::nibbles::Nibbles;
-use mpt_trie::partial_trie::{HashedPartialTrie, Node, PartialTrie};
-use padding_and_withdrawals::{
-    add_withdrawals_to_txns, pad_gen_inputs_with_dummy_inputs_if_needed, BlockMetaAndHashes,
+use anyhow::anyhow;
+use evm_arithmetization::{
+    generation::{GenerationInputs, TrieInputs},
+    proof::{BlockMetadata, ExtraBlockData, TrieRoots},
 };
-use rpc::{CliqueGetSignersAtHashResponse, EthChainIdResponse};
+use itertools::izip;
+use mpt_trie::{
+    nibbles::Nibbles,
+    partial_trie::{HashedPartialTrie, Node, PartialTrie},
+};
 use trace_decoder::types::HashedAccountAddr;
 
-use crate::utils::{has_storage_deletion, keccak};
 use crate::{
     mpt::{apply_diffs, insert_mpt, trim, Mpt},
-    rpc::get_block_hashes,
+    padding_and_withdrawals::{
+        add_withdrawals_to_txns, pad_gen_inputs_with_dummy_inputs_if_needed, BlockMetaAndHashes,
+    },
+    rpc::{get_block_hashes, CliqueGetSignersAtHashResponse, EthChainIdResponse},
+    utils::{has_storage_deletion, keccak},
 };
 
 type Provider = alloy::providers::RootProvider<alloy::transports::http::Http<reqwest::Client>>;
@@ -70,7 +69,7 @@ pub async fn get_proof(
     locations: Vec<H256>,
     block_number: u64,
     provider: &Provider,
-) -> Result<(Vec<Bytes>, Vec<StorageProof>, H256, bool)> {
+) -> anyhow::Result<(Vec<Bytes>, Vec<StorageProof>, H256, bool)> {
     // tracing::info!("Proof {:?}: {:?} {:?}", block_number, address, locations);
     // println!("Proof {:?}: {:?} {:?}", block_number, address, locations);
     let proof = provider.get_proof(address, locations, block_number.into());
@@ -100,8 +99,6 @@ fn tracing_options_diff() -> GethDebugTracingOptions {
         tracer: Some(GethDebugTracerType::BuiltInTracer(
             GethDebugBuiltInTracerType::PreStateTracer,
         )),
-
-        tracer_config: GethDebugTracerConfig(todo!()),
         ..GethDebugTracingOptions::default()
     }
 }
@@ -114,14 +111,6 @@ fn contract_codes() -> HashMap<H256, Vec<u8>> {
     map
 }
 
-fn convert_bloom(bloom: Bloom) -> [U256; 8] {
-    let mut other_bloom = [U256::default(); 8];
-    for i in 0..8 {
-        other_bloom[i] = U256::from_be_slice(&bloom.0[i * 32..(i + 1) * 32]);
-    }
-    other_bloom
-}
-
 const BLOCK_WITH_FULL_TRANSACTIONS: bool = true;
 
 /// Get the Plonky2 block metadata at the given block number.
@@ -130,7 +119,7 @@ pub async fn get_block_metadata(
     block_chain_id: U256,
     provider: &Provider,
     request_miner_from_clique: bool,
-) -> Result<(BlockMetadata, H256)> {
+) -> anyhow::Result<(BlockMetadata, H256)> {
     let block = provider
         .get_block(block_number.into(), BLOCK_WITH_FULL_TRANSACTIONS)
         .await?
@@ -170,7 +159,7 @@ pub async fn gather_witness(
     tx: TxHash,
     provider: &Provider,
     request_miner_from_clique: bool,
-) -> Result<Vec<GenerationInputs>> {
+) -> anyhow::Result<Vec<GenerationInputs>> {
     let tx = provider.get_transaction_by_hash(tx).await?;
     let block_number = tx.block_number.unwrap();
     let tx_index = usize::try_from(tx.transaction_index.unwrap()).unwrap();
@@ -194,11 +183,7 @@ pub async fn gather_witness(
     let mut traces: Vec<BTreeMap<Address, AccountState>> = vec![];
     let mut txns_info = vec![];
 
-    for &hash in block
-        .transactions
-        .hashes()
-        .take(usize::try_from(tx_index).unwrap() + 1)
-    {
+    for &hash in block.transactions.hashes().take(tx_index + 1) {
         let txn = provider.get_transaction_by_hash(hash).await?;
         // chain_id = txn.chain_id.unwrap(); // TODO: For type-0 txn, the chain_id is
         // not set so the unwrap panics.
@@ -235,13 +220,8 @@ pub async fn gather_witness(
         let empty_storage = storage.is_empty();
         let mut storage_keys = vec![];
         storage_keys.extend(storage.keys().copied());
-        let (proof, storage_proof, storage_hash, _account_is_empty) = get_proof(
-            *address,
-            storage_keys.clone(),
-            block_number - 1,
-            provider,
-        )
-        .await?;
+        let (proof, storage_proof, storage_hash, _account_is_empty) =
+            get_proof(*address, storage_keys.clone(), block_number - 1, provider).await?;
         insert_mpt(&mut state_mpt, proof);
 
         let (next_proof, next_storage_proof, _next_storage_hash, _next_account_is_empty) =
@@ -282,13 +262,8 @@ pub async fn gather_witness(
                 let mut storage_keys = vec![];
                 storage_keys.extend(storage.keys().copied());
 
-                let (proof, storage_proof, _storage_hash, _account_is_empty) = get_proof(
-                    address,
-                    storage_keys.clone(),
-                    block_number - 1,
-                    provider,
-                )
-                .await?;
+                let (proof, storage_proof, _storage_hash, _account_is_empty) =
+                    get_proof(address, storage_keys.clone(), block_number - 1, provider).await?;
                 insert_mpt(&mut state_mpt, proof);
 
                 let (next_proof, next_storage_proof, _next_storage_hash, _next_account_is_empty) =
@@ -335,17 +310,17 @@ pub async fn gather_witness(
     let mut bloom = Bloom::default();
 
     // Withdrawals
-    let wds = if let Some(v) = &block.withdrawals {
-        v.iter()
-            .map(|w| (w.address, U256::from(w.amount * 1_000_000_000))) // Alchemy returns Gweis for some reason
-            .collect()
-    } else {
-        vec![]
-    };
+    let wds = block
+        .withdrawals
+        .map(|it| {
+            it.iter()
+                .map(|w| (w.address, U256::from(w.amount * 1_000_000_000))) // Alchemy returns Gweis for some reason
+                .collect::<Vec<_>>()
+        })
+        .unwrap_or_default();
 
     // Block hashes
-    let block_hashes =
-        get_block_hashes(block_number, provider.client().transport().url()).await?;
+    let block_hashes = get_block_hashes(block_number, provider.client().transport().url()).await?;
 
     let mut storage_mpts: HashMap<_, _> = storage_mpts
         .iter()

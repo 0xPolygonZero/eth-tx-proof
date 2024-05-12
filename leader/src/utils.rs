@@ -1,8 +1,7 @@
 use alloy::rpc::types::trace::geth::{GethTrace, PreStateFrame};
-use ethers::utils::keccak256;
 
 pub fn keccak<T: AsRef<[u8]> + Clone>(bytes: T) -> [u8; 32] {
-    keccak256(bytes.clone())
+    ethers::utils::keccak256(bytes.clone())
 }
 
 pub fn has_storage_deletion(trace: &GethTrace) -> bool {
