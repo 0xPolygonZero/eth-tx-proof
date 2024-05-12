@@ -340,8 +340,11 @@ pub fn trim(
     touched: BTreeMap<Address, AccountState>,
     has_storage_deletion: bool,
 ) -> (HashedPartialTrie, HashMap<B256, HashedPartialTrie>) {
-    let tok = |addr: &Address| Nibbles::from_bytes_be(keccak(addr.0).as_slice()).unwrap();
-    let keys = touched.keys().map(tok).collect::<Vec<_>>();
+    let keys = touched
+        .keys()
+        .copied()
+        .map(address2nibbles)
+        .collect::<Vec<_>>();
     let new_state_trie = create_trie_subset(&trie, keys).unwrap();
     if has_storage_deletion {
         // TODO: This is inefficient. Replace with a smarter solution.
