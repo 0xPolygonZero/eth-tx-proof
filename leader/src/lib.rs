@@ -13,8 +13,9 @@ use alloy::{
     rpc::types::{
         eth::{EIP1186StorageProof as StorageProof, Transaction},
         trace::geth::{
-            AccountState, DiffMode, GethDebugBuiltInTracerType, GethDebugTracerType,
-            GethDebugTracingOptions, GethTrace, PreStateFrame, PreStateMode,
+            AccountState, DiffMode, GethDebugBuiltInTracerType, GethDebugTracerConfig,
+            GethDebugTracerType, GethDebugTracingOptions, GethTrace, PreStateConfig, PreStateFrame,
+            PreStateMode,
         },
     },
 };
@@ -99,7 +100,13 @@ fn tracing_options_diff() -> GethDebugTracingOptions {
         tracer: Some(GethDebugTracerType::BuiltInTracer(
             GethDebugBuiltInTracerType::PreStateTracer,
         )),
-        ..GethDebugTracingOptions::default()
+        tracer_config: GethDebugTracerConfig(
+            serde_json::to_value(PreStateConfig {
+                diff_mode: Some(true),
+            })
+            .unwrap(),
+        ),
+        ..Default::default()
     }
 }
 
