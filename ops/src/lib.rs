@@ -32,11 +32,10 @@ impl Operation for TxProof {
             .signed_txn
             .as_ref()
             .map(|txn| {
-                use alloy::rpc::types::eth::Transaction;
-                fn decode(_: &[u8]) -> Transaction {
-                    todo!("rlp::decode::<Transaction>") // TODO(aatifsyed)
-                }
-                decode(txn).hash.to_string()
+                // https://docs.rs/ethers-core/2.0.14/src/ethers_core/types/transaction/response.rs.html#404
+                // https://docs.rs/rlp/latest/src/rlp/rlpin.rs.html#136
+                let hash = alloy::primitives::keccak256(txn);
+                hash.to_string()
             })
             .unwrap_or_else(|| {
                 format!(
