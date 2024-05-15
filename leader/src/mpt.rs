@@ -275,7 +275,7 @@ pub fn apply_diffs(
             mpt.insert(
                 address2nibbles(*addr),
                 __ethers_for_compat::utils::rlp::encode(&account).to_vec(),
-            ) // TODO(aatifsyed): make the required change to evm_arithmetization
+            )
             .unwrap();
         } else {
             let old = mpt
@@ -375,6 +375,9 @@ pub fn trim(
 }
 
 fn into_uint(hash: B256) -> U256 {
-    U256::from_be_bytes(*hash) // TODO(aatifsyed): is this
-                               // right?
+    // TODO(aatifsyed): unclear if this is correct.
+    #[cfg(target_endian = "little")]
+    return U256::from_le_bytes(*hash);
+    #[cfg(target_endian = "big")]
+    return U256::from_be_bytes(*hash);
 }

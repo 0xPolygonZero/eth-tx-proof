@@ -27,7 +27,9 @@ pub fn has_storage_deletion(trace: &GethTrace) -> bool {
     false
 }
 /// This crate wants to use [`alloy`], but [`evm_arithmetization`] uses
-/// [`ethers`] etc. Migrating our dependencies is tracked by TODO(aatifsyed)
+/// [`ethers`](__ethers_for_compat) etc.
+///
+/// Migrating our dependencies is tracked by [zk_evm#226](https://github.com/0xPolygonZero/zk_evm/issues/229)
 pub mod compat {
     use std::array;
 
