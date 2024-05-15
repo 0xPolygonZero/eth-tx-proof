@@ -31,8 +31,6 @@ pub fn has_storage_deletion(trace: &GethTrace) -> bool {
 ///
 /// Migrating our dependencies is tracked by [zk_evm#226](https://github.com/0xPolygonZero/zk_evm/issues/229)
 pub mod compat {
-    use std::array;
-
     use alloy::primitives::FixedBytes;
 
     pub fn h256(FixedBytes(it): alloy::primitives::B256) -> __primitive_types_for_compat::H256 {
@@ -52,11 +50,14 @@ pub mod compat {
         // have 8 * 256, want 256 * 8, (no unsafe, no unstable)
         // TODO(aatifsyed): we're going from unintepreted bytes to an integer type
         //                  is this right?
-        let mut chunks = it.chunks_exact(32);
-        array::from_fn(|_ix| {
-            __primitive_types_for_compat::U256::from(
-                <[u8; 32]>::try_from(chunks.next().unwrap()).unwrap(),
-            )
-        })
+        let mut out = [__primitive_types_for_compat::U256::zero(); 8];
+        let chunks = it.chunks(32);
+        assert_eq!(chunks.len(), 8);
+        for (ix, chunk) in chunks.enumerate() {
+            let mut a = [0; 32];
+            a.copy_from_slice(chunk);
+            out[ix] = __primitive_types_for_compat::U256::from(a);
+        }
+        out
     }
 }
