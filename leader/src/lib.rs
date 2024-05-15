@@ -518,6 +518,12 @@ fn create_fully_hashed_out_trie_from_hash(h: B256) -> HashedPartialTrie {
     trie
 }
 
+/// There are two representations of domain objects in ethereum:
+/// - RPC (JSON), in [`alloy::rpc`].
+/// - RLP (binary), in [`alloy::consensus`].
+///
+/// This module provides best-effort [RLP encoding](alloy::rlp::Encodable) for
+/// RPC types.
 pub mod rlp {
     use alloy::consensus::{Receipt, ReceiptEnvelope, TxEip1559, TxEip2930, TxEip4844, TxLegacy};
     use alloy::rpc::types::eth::{ReceiptWithBloom, TransactionReceipt};
