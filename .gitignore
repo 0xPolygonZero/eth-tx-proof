@@ -3,3 +3,4 @@
 .idea/*
 *.zkproof
 prover_state_*
+*.ignoreme

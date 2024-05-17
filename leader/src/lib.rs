@@ -65,14 +65,13 @@ struct PartialTrieState {
 }
 
 /// Get the proof for an account + storage locations at a given block number.
+#[tracing::instrument(skip(provider), ret, err)]
 pub async fn get_proof(
     address: Address,
     locations: Vec<B256>,
     block_number: u64,
     provider: &Provider,
 ) -> anyhow::Result<(Vec<Bytes>, Vec<StorageProof>, B256, bool)> {
-    // tracing::info!("Proof {:?}: {:?} {:?}", block_number, address, locations);
-    // println!("Proof {:?}: {:?} {:?}", block_number, address, locations);
     let proof = provider.get_proof(address, locations, block_number.into());
     let proof = proof.await?;
     let is_empty =

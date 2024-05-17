@@ -55,7 +55,11 @@ impl Mpt {
         } else {
             return Node::Hash(crate::utils::compat::h256(root)).into();
         };
-        let a = <Vec<Vec<u8>>>::decode(&mut &*data).unwrap();
+        let a = Vec::<alloy::rlp::Bytes>::decode(&mut &*data)
+            .unwrap()
+            .into_iter()
+            .map(Vec::from)
+            .collect::<Vec<_>>();
         match a.len() {
             17 => {
                 let value = a[16].clone();
@@ -140,7 +144,7 @@ pub fn insert_mpt(mpt: &mut Mpt, proof: Vec<Bytes>) {
 fn insert_mpt_helper(mpt: &mut Mpt, rlp_node: Bytes) {
     mpt.mpt
         .insert(keccak(&rlp_node), MptNode(rlp_node.to_vec()));
-    let a = <Vec<Vec<u8>> as alloy::rlp::Decodable>::decode(&mut &rlp_node[..]).unwrap();
+    let a = <Vec<alloy::rlp::Bytes> as alloy::rlp::Decodable>::decode(&mut &rlp_node[..]).unwrap();
     if a.len() == 2 {
         let prefix = a[0].clone();
         let is_leaf = (prefix[0] >> 4 == 2) || (prefix[0] >> 4 == 3);
