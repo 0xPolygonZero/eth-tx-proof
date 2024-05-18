@@ -161,6 +161,9 @@ pub async fn get_block_metadata(
     ))
 }
 
+mod lib2;
+pub use lib2::gather;
+
 pub async fn gather_witness(
     tx: TxHash,
     provider: &Provider,
