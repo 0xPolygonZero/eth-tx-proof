@@ -247,9 +247,8 @@ pub async fn gather_witness(
             storage_mpts.insert(key, storage_mpt);
         }
         if let Some(code) = code {
-            let code = hex::decode(&code[2..])?;
             let codehash = keccak(&code);
-            contract_codes.insert(codehash, code);
+            contract_codes.insert(codehash, code.clone().into());
         }
     }
 

@@ -212,6 +212,7 @@ pub fn apply_diffs(
                     // println!("Done Del {:?} {:?}", addr, k);
                 } else {
                     let sanity = trie.get(b256_2nibbles(*k)).unwrap();
+                    //    TODO(aatifsyed): unwrap here after 25mins ^^^^^^
                     let sanity = U256::decode(&mut &*sanity).unwrap();
 
                     assert_eq!(sanity, into_uint(*v));
@@ -259,10 +260,8 @@ pub fn apply_diffs(
                     if s.is_empty() {
                         EMPTY_HASH
                     } else {
-                        let code = s.split_at(2).1;
-                        let bytes = hex::decode(code).unwrap();
-                        let h: B256 = keccak(&bytes);
-                        contract_code.insert(h, bytes);
+                        let h: B256 = keccak(&s);
+                        contract_code.insert(h, s.into());
                         h
                     }
                 })
@@ -298,10 +297,8 @@ pub fn apply_diffs(
                     if s.is_empty() {
                         EMPTY_HASH
                     } else {
-                        let code = s.split_at(2).1;
-                        let bytes = hex::decode(code).unwrap();
-                        let h = keccak(&bytes);
-                        contract_code.insert(h, bytes);
+                        let h = keccak(&s);
+                        contract_code.insert(h, s.into());
                         h
                     }
                 })
@@ -331,11 +328,11 @@ pub fn apply_diffs(
 }
 
 fn address2nibbles(addr: Address) -> Nibbles {
-    Nibbles::from_bytes_be(keccak(addr.0).as_slice()).unwrap()
+    Nibbles::from_bytes_le(keccak(addr.0).as_slice()).unwrap()
 }
 
 fn b256_2nibbles(k: B256) -> Nibbles {
-    Nibbles::from_bytes_be(keccak(k.0).as_slice()).unwrap()
+    Nibbles::from_bytes_le(keccak(k.0).as_slice()).unwrap()
 }
 
 pub fn trim(

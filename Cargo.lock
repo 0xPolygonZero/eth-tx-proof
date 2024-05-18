@@ -3548,7 +3548,6 @@ dependencies = [
  "ethers",
  "evm_arithmetization 0.1.3 (git+https://github.com/0xPolygonZero/zk_evm.git?branch=develop)",
  "futures",
- "hex",
  "itertools 0.11.0",
  "mpt_trie 0.2.1 (git+https://github.com/0xPolygonZero/zk_evm.git?branch=develop)",
  "ops",

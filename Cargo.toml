@@ -28,8 +28,6 @@ serde = { version = "1.0.193", features = ["derive"] }
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 
-[profile.release]
+[profile.dev.package.plonky2]
 opt-level = 3
-incremental = true
-lto = "fat"
 codegen-units = 1
