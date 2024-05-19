@@ -1,26 +1,31 @@
+use std::collections::BTreeMap;
+
 use alloy::{
-    primitives::TxHash,
-    providers::{ext::DebugApi as _, Network, Provider},
+    primitives::{Address, TxHash, B256},
+    providers::{ext::DebugApi as _, Provider},
     rpc::types::{
-        eth::Block,
+        eth::{Block, BlockTransactions, EIP1186AccountProofResponse, Transaction},
         trace::geth::{
-            DiffMode, GethDebugBuiltInTracerType, GethDebugTracerConfig, GethDebugTracerType,
-            GethDebugTracingOptions, GethTrace, PreStateConfig, PreStateFrame, PreStateMode,
+            AccountState, DiffMode, GethDebugBuiltInTracerType, GethDebugTracerConfig,
+            GethDebugTracerType, GethDebugTracingOptions, GethTrace, PreStateConfig, PreStateFrame,
+            PreStateMode,
         },
     },
     transports::Transport,
 };
-use anyhow::{bail, Context as _};
+use anyhow::{bail, ensure, Context as _};
+use futures::{FutureExt as _, StreamExt as _, TryFutureExt as _, TryStreamExt as _};
 
 const BLOCK_WITH_FULL_TRANSACTIONS: bool = true;
 const BLOCK_WITHOUT_FULL_TRANSACTIONS: bool = false;
 
 pub struct Gathered {
-    block: Block,
+    root_transaction: Transaction,
+    root_block: Block,
 }
 
 pub async fn gather<ProviderT, TransportT>(
-    tx: TxHash,
+    target_transaction: TxHash,
     provider: ProviderT,
     request_miner_from_clique: bool,
 ) -> anyhow::Result<()>
@@ -28,28 +33,46 @@ where
     ProviderT: Provider<TransportT>,
     TransportT: Clone + Transport,
 {
-    let tx = provider
-        .get_transaction_by_hash(tx)
+    // 1. Get the target transaction
+    let target_transaction = provider
+        .get_transaction_by_hash(target_transaction)
         .await
         .context("couldn't get root transaction")?;
-    let block_number = tx.block_number.context("transaction has no block number")?;
-    let tx_index = tx
-        .transaction_index
-        .and_then(|it| usize::try_from(it).ok())
-        .context("absent or out-of-bounds transaction index")?;
+
+    // 2. Get the block that contains that transaction
+    let block_number = target_transaction
+        .block_number
+        .context("transaction has no block number")?;
     let block = provider
         .get_block(block_number.into(), BLOCK_WITH_FULL_TRANSACTIONS)
         .await
         .context("couldn't get block")?
         .context("no such block")?;
 
-    let chain_id = provider
-        .get_chain_id()
-        .await
-        .context("couldn't get chain id")?;
+    // 3. Get the preceding transactions
+    let mut all_transactions_in_block = match block.transactions.clone() {
+        BlockTransactions::Full(it) => it,
+        other => bail!("expected full transactions, got {:?}", other),
+    };
+    let target_transaction_index = target_transaction
+        .transaction_index
+        .and_then(|it| usize::try_from(it).ok())
+        .context("absent or out-of-bounds transaction index")?;
+    ensure!(
+        all_transactions_in_block
+            .get(target_transaction_index)
+            .is_some_and(|it| *it == target_transaction),
+        "inconsistent block"
+    );
+    all_transactions_in_block.truncate(target_transaction_index);
+    let preceding_transactions = all_transactions_in_block;
 
-    for (transaction_ix, transaction_hash) in
-        block.transactions.hashes().take(tx_index + 1).enumerate()
+    // 3. For each preceding transaction in the block
+    for (transaction_ix, transaction_hash) in block
+        .transactions
+        .hashes()
+        .take(target_transaction_index + 1)
+        .enumerate()
     {
         let transaction = provider
             .get_transaction_by_hash(*transaction_hash)
@@ -66,7 +89,32 @@ where
             .context("couldn't get proof for withdrawal")?;
     }
 
-    provider.get_block(block_number.into(), BLOCK_WITHOUT_FULL_TRANSACTIONS);
+    let mut prev_hashes = [B256::ZERO; 256];
+    let concurrency = prev_hashes.len();
+    futures::stream::iter(
+        prev_hashes
+            .iter_mut()
+            .rev()
+            .zip(std::iter::successors(Some(block_number), |it| {
+                it.checked_sub(1)
+            }))
+            .map(|(dst, block_number)| {
+                let provider = &provider;
+                async move {
+                    let block = provider
+                        .get_block(block_number.into(), BLOCK_WITHOUT_FULL_TRANSACTIONS)
+                        .await
+                        .context("couldn't get block")?
+                        .context("no such block")?;
+                    *dst = block.header.parent_hash;
+                    anyhow::Ok(())
+                }
+            }),
+    )
+    .buffered(concurrency)
+    .try_collect::<()>()
+    .await
+    .context("couldn't fill previous hashes")?;
 
     todo!()
 }
@@ -116,8 +164,30 @@ where
     Ok(())
 }
 
+pub struct TracedTransaction {
+    transaction: Transaction,
+    /// Proof is retrieved from the _previous_ block
+    pre_state_accounts_and_proofs: BTreeMap<Address, (AccountState, EIP1186AccountProofResponse)>,
+    diff_pre_accounts_and_proofs: BTreeMap<
+        Address,
+        (
+            AccountState,
+            EIP1186AccountProofResponse, // from the _previous_ block
+            EIP1186AccountProofResponse, // from the target block
+        ),
+    >,
+    diff_post_accounts_and_proofs: BTreeMap<
+        Address,
+        (
+            AccountState,
+            EIP1186AccountProofResponse, // from the _previous_ block
+            EIP1186AccountProofResponse, // from the target block
+        ),
+    >,
+}
+
 async fn thing1<ProviderT, TransportT>(
-    provider: &ProviderT,
+    provider: ProviderT,
     transaction_hash: &alloy::primitives::FixedBytes<32>,
     block_number: u64,
 ) -> Result<(), anyhow::Error>
