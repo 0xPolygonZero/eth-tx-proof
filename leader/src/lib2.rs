@@ -14,7 +14,7 @@ use alloy::{
     transports::Transport,
 };
 use anyhow::{bail, ensure, Context as _};
-use futures::{FutureExt as _, StreamExt as _, TryFutureExt as _, TryStreamExt as _};
+use futures::{stream, FutureExt as _, StreamExt as _, TryFutureExt as _, TryStreamExt as _};
 
 const BLOCK_WITH_FULL_TRANSACTIONS: bool = true;
 const BLOCK_WITHOUT_FULL_TRANSACTIONS: bool = false;
@@ -78,7 +78,7 @@ where
             .get_transaction_by_hash(*transaction_hash)
             .await
             .context("couldn't get transaction")?;
-        thing1(&provider, transaction_hash, block_number).await?;
+        pre_state_accounts_and_proofs(&provider, transaction_hash, block_number).await?;
         thing2(&provider, transaction_hash, block_number).await?;
     }
 
@@ -128,40 +128,7 @@ where
     ProviderT: Provider<TransportT>,
     TransportT: Transport + Clone,
 {
-    let trace = provider
-        .debug_trace_transaction(
-            *transaction_hash,
-            GethDebugTracingOptions {
-                tracer: Some(GethDebugTracerType::BuiltInTracer(
-                    GethDebugBuiltInTracerType::PreStateTracer,
-                )),
-                tracer_config: GethDebugTracerConfig(
-                    serde_json::to_value(PreStateConfig {
-                        diff_mode: Some(true),
-                    })
-                    .unwrap(),
-                ),
-                ..Default::default()
-            },
-        )
-        .await
-        .context("couldn't debug trace transaction (with diff)")?;
-    let DiffMode { post, pre } = match trace {
-        GethTrace::PreStateTracer(PreStateFrame::Diff(it)) => it,
-        other => bail!("inconsistent trace: {:?}", other),
-    };
-    for (address, account_state) in pre.into_iter().chain(post) {
-        let storage_keys = account_state.storage.keys().copied().collect::<Vec<_>>();
-        let previous_proof = provider
-            .get_proof(address, storage_keys.clone(), (block_number - 1).into())
-            .await
-            .context("couldn't get previous proof")?;
-        let next_proof = provider
-            .get_proof(address, storage_keys, block_number.into())
-            .await
-            .context("couldn't get next proof")?;
-    }
-    Ok(())
+    todo!()
 }
 
 pub struct TracedTransaction {
@@ -186,18 +153,81 @@ pub struct TracedTransaction {
     >,
 }
 
-async fn thing1<ProviderT, TransportT>(
+async fn with_trace<ProviderT, TransportT>(
     provider: ProviderT,
-    transaction_hash: &alloy::primitives::FixedBytes<32>,
-    block_number: u64,
-) -> Result<(), anyhow::Error>
+    transaction: Transaction,
+) -> anyhow::Result<TracedTransaction>
+where
+    ProviderT: Provider<TransportT>,
+    TransportT: Transport + Clone,
+{
+    todo!()
+}
+
+async fn diffed_accounts_and_proofs<ProviderT, TransportT>(
+    provider: ProviderT,
+    transaction: &Transaction,
+) -> anyhow::Result<
+    [BTreeMap<
+        Address,
+        (
+            AccountState,
+            EIP1186AccountProofResponse,
+            EIP1186AccountProofResponse,
+        ),
+    >; 2],
+>
+where
+    ProviderT: Provider<TransportT>,
+    TransportT: Transport + Clone,
+{
+    let trace = provider
+        .debug_trace_transaction(
+            transaction.hash,
+            GethDebugTracingOptions {
+                tracer: Some(GethDebugTracerType::BuiltInTracer(
+                    GethDebugBuiltInTracerType::PreStateTracer,
+                )),
+                tracer_config: GethDebugTracerConfig(
+                    serde_json::to_value(PreStateConfig {
+                        diff_mode: Some(true),
+                    })
+                    .unwrap(),
+                ),
+                ..Default::default()
+            },
+        )
+        .await
+        .context("couldn't debug trace transaction (with diff)")?;
+    let DiffMode { post, pre } = match trace {
+        GethTrace::PreStateTracer(PreStateFrame::Diff(it)) => it,
+        other => bail!("expected PreStateFrame::Diff, got {:?}", other),
+    };
+    for (address, account_state) in pre.into_iter().chain(post) {
+        let storage_keys = account_state.storage.keys().copied().collect::<Vec<_>>();
+        let previous_proof = provider
+            .get_proof(address, storage_keys.clone(), (block_number - 1).into())
+            .await
+            .context("couldn't get previous proof")?;
+        let next_proof = provider
+            .get_proof(address, storage_keys, block_number.into())
+            .await
+            .context("couldn't get next proof")?;
+    }
+    todo!()
+}
+
+async fn pre_state_accounts_and_proofs<ProviderT, TransportT>(
+    provider: ProviderT,
+    transaction: &Transaction,
+) -> anyhow::Result<BTreeMap<Address, (AccountState, EIP1186AccountProofResponse)>>
 where
     ProviderT: Provider<TransportT>,
     TransportT: Clone + Transport,
 {
     let trace = provider
         .debug_trace_transaction(
-            *transaction_hash,
+            transaction.hash,
             GethDebugTracingOptions {
                 tracer: Some(GethDebugTracerType::BuiltInTracer(
                     GethDebugBuiltInTracerType::PreStateTracer,
@@ -209,17 +239,27 @@ where
         .context("couldn't debug trace transaction (without diff)")?;
     let PreStateMode(accounts) = match trace {
         GethTrace::PreStateTracer(PreStateFrame::Default(it)) => it,
-        other => bail!("inconsistent trace: {:?}", other),
+        other => bail!("expected PreStateFrame::Default, got: {:?}", other),
     };
-    for (address, account_state) in accounts {
-        let proof = provider
-            .get_proof(
-                address,
-                account_state.storage.keys().copied().collect(),
-                (block_number - 1).into(),
-            )
-            .await
-            .context("couldn't get proof")?;
-    }
-    Ok(())
+    let previous_block_number = transaction
+        .block_number
+        .and_then(|it| it.checked_sub(1))
+        .context("invalid or absent block number")?;
+    let concurrency = accounts.len();
+    let provider = &provider;
+    stream::iter(accounts)
+        .map(|(address, account_state)| async move {
+            let proof = provider
+                .get_proof(
+                    address,
+                    account_state.storage.keys().copied().collect(),
+                    previous_block_number.into(),
+                )
+                .await
+                .context("couldn't get proof")?;
+            anyhow::Ok((address, (account_state, proof)))
+        })
+        .buffered(concurrency)
+        .try_collect()
+        .await
 }
